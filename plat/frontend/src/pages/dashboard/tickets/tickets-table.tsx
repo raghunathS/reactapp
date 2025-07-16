@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   SpaceBetween,
@@ -14,9 +14,10 @@ import {
 interface Ticket {
   id: number;
   subject: string;
-  status: 'Open' | 'In Progress' | 'Closed';
-  priority: 'Low' | 'Medium' | 'High';
+  status: string;
+  priority: string;
   created_at: string;
+  application: string;
 }
 
 const TicketColumnDefinitions: TableProps.ColumnDefinition<Ticket>[] = [
@@ -53,8 +54,14 @@ const TicketColumnDefinitions: TableProps.ColumnDefinition<Ticket>[] = [
   {
     id: "created_at",
     header: "Created At",
+    cell: (item: Ticket) => new Date(item.created_at).toLocaleDateString(),
     sortingField: "created_at",
-    cell: (item) => new Date(item.created_at).toLocaleDateString(),
+  },
+  {
+    id: "application",
+    header: "Application",
+    cell: (item: Ticket) => item.application,
+    sortingField: "application",
   },
 ];
 
@@ -63,13 +70,17 @@ export default function TicketsTable() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(1);
   const [totalTickets, setTotalTickets] = useState(0);
+  const [sortingColumn, setSortingColumn] = useState<TableProps.SortingColumn<Ticket>>({ sortingField: 'id' });
+  const [isDescending, setIsDescending] = useState<boolean>(false);
   const pageSize = 25;
 
   useEffect(() => {
     const fetchTickets = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`http://localhost:8001/api/tickets?page=${currentPageIndex}&size=${pageSize}`);
+        const sortOrder = isDescending ? 'desc' : 'asc';
+        const sortBy = sortingColumn.sortingField || 'id';
+        const response = await fetch(`http://localhost:8001/api/tickets?page=${currentPageIndex}&size=${pageSize}&sort_by=${sortBy}&sort_order=${sortOrder}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -84,12 +95,18 @@ export default function TicketsTable() {
     };
 
     fetchTickets();
-  }, [currentPageIndex]);
+  }, [currentPageIndex, sortingColumn, isDescending]);
 
   return (
     <Table
       loading={loading}
       loadingText="Loading tickets"
+      onSortingChange={({ detail }) => {
+        setSortingColumn(detail.sortingColumn);
+        setIsDescending(detail.isDescending || false);
+      }}
+      sortingColumn={sortingColumn}
+      sortingDescending={isDescending}
       columnDefinitions={TicketColumnDefinitions}
       items={tickets}
       header={

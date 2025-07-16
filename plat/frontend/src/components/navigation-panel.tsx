@@ -24,7 +24,7 @@ export default function NavigationPanel() {
       {
         type: "section",
         text: "Section 1",
-        items: [{ type: "link", text: "Items", href: "/section1" }],
+        items: [{ type: "link", text: "Items", href: "/section1/items" }],
       },
       {
         type: "section",
@@ -33,6 +33,25 @@ export default function NavigationPanel() {
           { type: "link", text: "Item 1", href: "/section2/item1" },
           { type: "link", text: "Item 2", href: "/section2/item2" },
           { type: "link", text: "Item 2", href: "/section2/item3" },
+        ],
+      },
+      {
+        type: "section",
+        text: "Section 3",
+        items: [
+          { type: "link", text: "AWS", href: "/section3/aws" },
+          { type: "link", text: "GCP", href: "/section3/gcp" },
+        ],
+      },
+      {
+        type: "section",
+        text: "Section 4",
+        items: [
+          {
+            type: "link",
+            text: "Confluence Viewer",
+            href: "/section4/confluence",
+          },
         ],
       },
     ];
