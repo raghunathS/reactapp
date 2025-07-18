@@ -1,143 +1,353 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useYearFilter } from "../../../common/contexts/year-filter-context";
 import {
-  Box,
-  SpaceBetween,
-  TableProps,
-  Header,
-  Table,
-  StatusIndicator,
-  Pagination,
   Button,
+  CollectionPreferences,
+  type CollectionPreferencesProps,
+  Header,
+  Input,
+  Link,
+  Pagination,
+  StatusIndicator,
+  Table,
+  type TableProps,
 } from "@cloudscape-design/components";
 
-// Define the Ticket type
+// Define the Ticket type to match the backend response
 interface Ticket {
-  id: number;
-  subject: string;
-  status: string;
-  priority: string;
-  created_at: string;
-  application: string;
+  Key: string;
+  Summary: string;
+  Status: string; // This will be dynamically created
+  Priority: string;
+  tCreated: string;
+  AppCode: string;
+  CSP: string;
+  tResolved: string | null;
+  Environment: string;
+  NarrowEnvironment: string;
+  AlertType: string;
+  ConfigRule: string;
+  Account: string;
 }
 
-const TicketColumnDefinitions: TableProps.ColumnDefinition<Ticket>[] = [
+const getTicketColumnDefinitions = (
+  filters: Partial<Record<keyof Ticket, string>>,
+  setFilters: (filters: Partial<Record<keyof Ticket, string>>) => void
+): TableProps.ColumnDefinition<Ticket>[] => [
   {
-    id: "id",
-    header: "Ticket ID",
-    sortingField: "id",
-    cell: (item) => item.id,
+    id: "Key",
+    header: (
+      <div>
+        <div>Ticket ID</div>
+        <Input
+          value={filters.Key || ''}
+          onChange={event => setFilters({ ...filters, Key: event.detail.value })}
+          placeholder="Filter by ID"
+        />
+      </div>
+    ),
+    sortingField: "Key",
+    cell: (item) => <Link href={`https://myjira.jiira.com/issues/${item.Key}`} external>{item.Key}</Link>,
     isRowHeader: true,
   },
   {
-    id: "subject",
-    header: "Subject",
-    sortingField: "subject",
-    cell: (item) => item.subject,
+    id: "Summary",
+    header: (
+      <div>
+        <div>Summary</div>
+        <Input
+          value={filters.Summary || ''}
+          onChange={event => setFilters({ ...filters, Summary: event.detail.value })}
+          placeholder="Filter by Summary"
+        />
+      </div>
+    ),
+    sortingField: "Summary",
+    cell: (item) => item.Summary,
   },
   {
-    id: "status",
+    id: "Status",
     header: "Status",
-    sortingField: "status",
+    sortingField: "Status",
     cell: (item) => {
-        let statusType: "success" | "info" | "error" = "info";
-        if (item.status === 'Closed') statusType = "success";
-        if (item.status === 'Open') statusType = "error";
-        return <StatusIndicator type={statusType}>{item.status}</StatusIndicator>
+        const isResolved = item.tResolved !== null && item.tResolved !== '';
+        const statusType = isResolved ? "success" : "error";
+        const statusText = isResolved ? "Closed" : "Open";
+        return <StatusIndicator type={statusType}>{statusText}</StatusIndicator>
     },
   },
   {
-    id: "priority",
-    header: "Priority",
-    sortingField: "priority",
-    cell: (item) => item.priority,
+    id: "Priority",
+    header: (
+      <div>
+        <div>Priority</div>
+        <Input
+          value={filters.Priority || ''}
+          onChange={event => setFilters({ ...filters, Priority: event.detail.value })}
+          placeholder="Filter by Priority"
+        />
+      </div>
+    ),
+    sortingField: "Priority",
+    cell: (item) => item.Priority,
   },
   {
-    id: "created_at",
+    id: "tCreated",
     header: "Created At",
-    cell: (item: Ticket) => new Date(item.created_at).toLocaleDateString(),
-    sortingField: "created_at",
+    cell: (item: Ticket) => new Date(item.tCreated).toLocaleDateString(),
+    sortingField: "tCreated",
   },
   {
-    id: "application",
-    header: "Application",
-    cell: (item: Ticket) => item.application,
-    sortingField: "application",
+    id: "AppCode",
+    header: (
+      <div>
+        <div>Application</div>
+        <Input
+          value={filters.AppCode || ''}
+          onChange={event => setFilters({ ...filters, AppCode: event.detail.value })}
+          placeholder="Filter by App"
+        />
+      </div>
+    ),
+    cell: (item: Ticket) => item.AppCode,
+    sortingField: "AppCode",
+  },
+    {
+    id: "CSP",
+    header: (
+      <div>
+        <div>Cloud</div>
+        <Input
+          value={filters.CSP || ''}
+          onChange={event => setFilters({ ...filters, CSP: event.detail.value })}
+          placeholder="Filter by Cloud"
+        />
+      </div>
+    ),
+    cell: (item: Ticket) => item.CSP,
+    sortingField: "CSP",
+  },
+  {
+    id: "Environment",
+    header: (
+      <div>
+        <div>Environment</div>
+        <Input
+          value={filters.Environment || ''}
+          onChange={event => setFilters({ ...filters, Environment: event.detail.value })}
+          placeholder="Filter by Env"
+        />
+      </div>
+    ),
+    cell: (item: Ticket) => item.Environment,
+    sortingField: "Environment",
+  },
+  {
+    id: "NarrowEnvironment",
+    header: (
+      <div>
+        <div>Narrow Env.</div>
+        <Input
+          value={filters.NarrowEnvironment || ''}
+          onChange={event => setFilters({ ...filters, NarrowEnvironment: event.detail.value })}
+          placeholder="Filter by Narrow Env"
+        />
+      </div>
+    ),
+    cell: (item: Ticket) => item.NarrowEnvironment,
+    sortingField: "NarrowEnvironment",
+  },
+  {
+    id: "AlertType",
+    header: (
+      <div>
+        <div>Alert Type</div>
+        <Input
+          value={filters.AlertType || ''}
+          onChange={event => setFilters({ ...filters, AlertType: event.detail.value })}
+          placeholder="Filter by Type"
+        />
+      </div>
+    ),
+    cell: (item: Ticket) => item.AlertType,
+    sortingField: "AlertType",
+  },
+  {
+    id: "ConfigRule",
+    header: (
+      <div>
+        <div>Config Rule</div>
+        <Input
+          value={filters.ConfigRule || ''}
+          onChange={event => setFilters({ ...filters, ConfigRule: event.detail.value })}
+          placeholder="Filter by Rule"
+        />
+      </div>
+    ),
+    cell: (item: Ticket) => item.ConfigRule,
+    sortingField: "ConfigRule",
+  },
+  {
+    id: "Account",
+    header: (
+      <div>
+        <div>Account</div>
+        <Input
+          value={filters.Account || ''}
+          onChange={event => setFilters({ ...filters, Account: event.detail.value })}
+          placeholder="Filter by Account"
+        />
+      </div>
+    ),
+    cell: (item: Ticket) => item.Account,
+    sortingField: "Account",
   },
 ];
 
+const VISIBLE_CONTENT_OPTIONS: CollectionPreferencesProps.VisibleContentOptionsGroup[] = [
+    {
+        label: "Ticket Properties",
+        options: [
+            { id: "Key", label: "Ticket ID" },
+            { id: "Summary", label: "Summary" },
+            { id: "Status", label: "Status" },
+            { id: "Priority", label: "Priority" },
+            { id: "tCreated", label: "Created At" },
+            { id: "AppCode", label: "Application" },
+            { id: "CSP", label: "Cloud" },
+            { id: "Environment", label: "Environment" },
+            { id: "NarrowEnvironment", label: "Narrow Environment" },
+            { id: "AlertType", label: "Alert Type" },
+            { id: "ConfigRule", label: "Config Rule" },
+            { id: "Account", label: "Account" },
+        ]
+    }
+];
+
 export default function TicketsTable() {
+  const { selectedYear } = useYearFilter();
   const [loading, setLoading] = useState(true);
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [currentPageIndex, setCurrentPageIndex] = useState(1);
   const [totalTickets, setTotalTickets] = useState(0);
-  const [sortingColumn, setSortingColumn] = useState<TableProps.SortingColumn<Ticket>>({ sortingField: 'id' });
+  const [currentPageIndex, setCurrentPageIndex] = useState(1);
+  const [sortingColumn, setSortingColumn] = useState<TableProps.SortingColumn<Ticket>>({ sortingField: 'Key' });
   const [isDescending, setIsDescending] = useState<boolean>(false);
-  const pageSize = 25;
+  const [filters, setFilters] = useState<Partial<Record<keyof Ticket, string>>>({});
+  const [preferences, setPreferences] = useState<CollectionPreferencesProps.Preferences>({
+    visibleContent: ['Key', 'Summary', 'Status', 'Priority', 'tCreated', 'AppCode', 'CSP', 'Environment', 'NarrowEnvironment', 'AlertType', 'ConfigRule', 'Account'],
+    pageSize: 25,
+  });
+
+  const columnDefinitions = useMemo(
+    () => getTicketColumnDefinitions(filters, setFilters),
+    [filters]
+  );
+
+  const fetchTickets = async () => {
+    setLoading(true);
+    const params = new URLSearchParams({
+      page: String(currentPageIndex),
+      size: String(preferences.pageSize),
+      sort_by: sortingColumn.sortingField || 'Key',
+      sort_order: isDescending ? 'desc' : 'asc',
+      year: String(selectedYear),
+      ...filters,
+    });
+
+    try {
+      const response = await fetch(`/api/tickets?${params.toString()}`);
+      const data = await response.json();
+      setTickets(data.tickets);
+      setTotalTickets(data.total);
+    } catch (error) {
+      console.error("Error fetching tickets:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchTickets = async () => {
-      setLoading(true);
-      try {
-        const sortOrder = isDescending ? 'desc' : 'asc';
-        const sortBy = sortingColumn.sortingField || 'id';
-        const response = await fetch(`http://localhost:8001/api/tickets?page=${currentPageIndex}&size=${pageSize}&sort_by=${sortBy}&sort_order=${sortOrder}`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setTickets(data.tickets);
-        setTotalTickets(data.total);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchTickets();
-  }, [currentPageIndex, sortingColumn, isDescending]);
+  }, [currentPageIndex, sortingColumn, isDescending, filters, preferences.pageSize, selectedYear]);
+
+  const handleSortingChange = (detail: TableProps.SortingState<Ticket>) => {
+    if (detail.sortingColumn) {
+      setSortingColumn(detail.sortingColumn);
+      setIsDescending(detail.isDescending || false);
+    }
+  };
+
+  const handleDownload = async () => {
+    const params = new URLSearchParams({
+        sort_by: sortingColumn.sortingField || 'Key',
+        sort_order: isDescending ? 'desc' : 'asc',
+        year: String(selectedYear),
+        ...filters
+    });
+
+    try {
+        const response = await fetch(`/api/tickets/download?${params.toString()}`);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tickets_${selectedYear}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    } catch (error) {
+        console.error('Error downloading tickets:', error);
+    }
+  };
 
   return (
     <Table
-      loading={loading}
-      loadingText="Loading tickets"
-      onSortingChange={({ detail }) => {
-        setSortingColumn(detail.sortingColumn);
-        setIsDescending(detail.isDescending || false);
-      }}
-      sortingColumn={sortingColumn}
-      sortingDescending={isDescending}
-      columnDefinitions={TicketColumnDefinitions}
       items={tickets}
+      columnDefinitions={columnDefinitions}
+      loading={loading}
+      loadingText="Loading tickets..."
       header={
         <Header
+          counter={`(${totalTickets})`}
           actions={
-            <Button
-              variant="primary"
-              onClick={() => window.open('http://localhost:8001/api/tickets/download', '_blank')}
-            >
+            <Button iconName="download" onClick={handleDownload}>
               Download CSV
             </Button>
           }
         >
-          All Tickets
+          Tickets
         </Header>
       }
       pagination={
         <Pagination
           currentPageIndex={currentPageIndex}
-          pagesCount={Math.ceil(totalTickets / pageSize)}
+          pagesCount={Math.ceil(totalTickets / (preferences.pageSize || 25))}
           onChange={({ detail }) => setCurrentPageIndex(detail.currentPageIndex)}
         />
       }
-      empty={
-        <Box margin={{ vertical: "xs" }} textAlign="center" color="inherit">
-          <SpaceBetween size="xxs">
-            <div>
-              <b>No tickets found</b>
-            </div>
-          </SpaceBetween>
-        </Box>
+      sortingColumn={sortingColumn}
+      sortingDescending={isDescending}
+      onSortingChange={({ detail }) => handleSortingChange(detail)}
+      preferences={
+        <CollectionPreferences
+          title="Preferences"
+          confirmLabel="Confirm"
+          cancelLabel="Cancel"
+          preferences={preferences}
+          onConfirm={({ detail }) => setPreferences(detail)}
+          pageSizePreference={{
+            title: "Page size",
+            options: [
+              { value: 25, label: "25 tickets" },
+              { value: 50, label: "50 tickets" },
+              { value: 100, label: "100 tickets" },
+            ],
+          }}
+          visibleContentPreference={{
+            title: "Select visible columns",
+            options: VISIBLE_CONTENT_OPTIONS,
+          }}
+        />
       }
     />
   );

@@ -23,35 +23,41 @@ export default function NavigationPanel() {
       },
       {
         type: "section",
-        text: "Section 1",
-        items: [{ type: "link", text: "Items", href: "/section1/items" }],
+        text: "AWS",
+        items: [{ type: "link", text: "SecOps Reports", href: "/aws/secops-reports" }],
       },
       {
         type: "section",
-        text: "Section 2",
+        text: "GCP",
         items: [
-          { type: "link", text: "Item 1", href: "/section2/item1" },
-          { type: "link", text: "Item 2", href: "/section2/item2" },
-          { type: "link", text: "Item 2", href: "/section2/item3" },
+          { type: "link", text: "SecOps Reports", href: "/gcp/secops-reports" },
         ],
       },
       {
         type: "section",
-        text: "Section 3",
+        text: "Agents",
         items: [
-          { type: "link", text: "AWS", href: "/section3/aws" },
-          { type: "link", text: "GCP", href: "/section3/gcp" },
+          { type: "link", text: "AWS", href: "/agents/aws" },
+          { type: "link", text: "GCP", href: "/agents/gcp" },
         ],
       },
       {
         type: "section",
-        text: "Section 4",
+        text: "Whitepapers",
         items: [
           {
             type: "link",
             text: "Confluence Viewer",
-            href: "/section4/confluence",
+            href: "/whitepapers/confluence",
           },
+        ],
+      },
+      {
+        type: "section",
+        text: "ArchitectureToCode (ATC)",
+        items: [
+          { type: "link", text: "AWS", href: "/atc/aws" },
+          { type: "link", text: "GCP", href: "/atc/gcp" },
         ],
       },
     ];

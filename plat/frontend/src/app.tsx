@@ -8,13 +8,13 @@ import {
 import { USE_BROWSER_ROUTER } from "./common/constants";
 import GlobalHeader from "./components/global-header";
 import DashboardPage from "./pages/dashboard/dashboard-page";
-import ViewItemPage from "./pages/section1/view-item/view-item-page";
-import AllItemsPage from "./pages/section1/all-items/all-items-page";
-import ItemsPage from "./pages/section1/items-page";
-import AddItemPage from "./pages/section1/add-item/add-item-page";
-import Item1Page from "./pages/section2/item1-page";
-import ChatbotPage from './pages/section3/chatbot-page';
-import ConfluencePage from './pages/section4/confluence-page';
+import ViewItemPage from "./pages/aws/view-item/view-item-page";
+import AllItemsPage from "./pages/aws/secops-reports/secops-reports-page";
+import AddItemPage from "./pages/aws/add-item/add-item-page";
+import Item1Page from "./pages/gcp/secops-reports-page";
+import ChatbotPage from './pages/agents/chatbot-page';
+import ConfluencePage from './pages/whitepapers/confluence-page';
+import AtcPage from './pages/atc/atc-page';
 import NotFound from "./pages/not-found";
 import "./styles/app.scss";
 
@@ -29,15 +29,15 @@ export default function App() {
         <div>
           <Routes>
             <Route index path="/" element={<DashboardPage />} />
-            <Route path="/section1" element={<Outlet />}>
-              <Route path="" element={<AllItemsPage />} />
-              <Route path="items" element={<ItemsPage />} />
+            <Route path="/aws" element={<Outlet />}>
+              <Route path="secops-reports" element={<AllItemsPage />} />
               <Route path="add" element={<AddItemPage />} />
-              <Route path="items/:itemId" element={<ViewItemPage />} />
+              <Route path="secops-reports/:itemId" element={<ViewItemPage />} />
             </Route>
-            <Route path="/section2/item1" element={<Item1Page />} />
-            <Route path="/section3/:agentName" element={<ChatbotPage />} />
-            <Route path="/section4/confluence" element={<ConfluencePage />} />
+            <Route path="/gcp/secops-reports" element={<Item1Page />} />
+            <Route path="/agents/:agentName" element={<ChatbotPage />} />
+            <Route path="/whitepapers/confluence" element={<ConfluencePage />} />
+            <Route path="/atc/:provider" element={<AtcPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>

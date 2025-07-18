@@ -1,11 +1,52 @@
 import pandas as pd
-from fastapi import FastAPI, Response
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
+from fastapi import FastAPI, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from faker import Faker
-import random
+import json
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
-fake = Faker()
+
+tickets_df = None
+
+class CSPStatistics(BaseModel):
+    total_tickets: int
+    monthly_average: float
+
+class EnvironmentSummaryResponse(BaseModel):
+    aws: List[Dict[str, Any]]
+    gcp: List[Dict[str, Any]]
+    aws_stats: CSPStatistics
+    gcp_stats: CSPStatistics
+
+
+@app.on_event("startup")
+def startup_event():
+    """Load the dataset into memory when the application starts."""
+    global tickets_df
+    try:
+        tickets_df = pd.read_csv('ticket_data.csv')
+        tickets_df['tCreated'] = pd.to_datetime(tickets_df['tCreated'])
+        tickets_df['tResolved'] = pd.to_datetime(tickets_df['tResolved'], errors='coerce')
+        tickets_df['Priority'] = tickets_df['Priority'].fillna('unknown')
+        print("Ticket data loaded successfully.")
+    except FileNotFoundError:
+        print("Error: ticket_data.csv not found. Starting with an empty DataFrame.")
+        tickets_df = pd.DataFrame()
+
+def get_data(year: Optional[int] = None) -> pd.DataFrame:
+    """
+    Helper function to get a copy of the dataframe, filtered by year if provided.
+    """
+    df = tickets_df.copy()
+    if year:
+        df = df[df['tCreated'].dt.year == year]
+    return df
 
 # Allow requests from the React frontend
 # Mock Confluence Data
@@ -56,61 +97,247 @@ async def get_confluence_page(page_id: str):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Adjust if your frontend runs on a different port
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005", "http://localhost:3006", "http://localhost:3007", "http://localhost:3008", "http://localhost:3009", "http://localhost:3010"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-def create_ticket_data():
-    """Generates a mock DataFrame of ticket information."""
-    statuses = ['Open', 'In Progress', 'Closed']
-    priorities = ['Low', 'Medium', 'High']
-    applications = ['application1', 'application2', 'application3']
-    data = {
-        'id': [i for i in range(1, 201)],
-        'subject': [fake.sentence(nb_words=6) for _ in range(200)],
-        'status': [random.choice(statuses) for _ in range(200)],
-        'priority': [random.choice(priorities) for _ in range(200)],
-        'created_at': [fake.date_time_this_year() for _ in range(200)],
-        'application': [random.choice(applications) for _ in range(200)],
-    }
-    return pd.DataFrame(data)
+@app.get("/api/tickets-filter-options")
+def get_ticket_filter_options():
+    """
+    Provides the unique values for filterable ticket columns.
+    """
+    try:
+        options = {
+            "Priority": sorted([str(p) for p in tickets_df['Priority'].unique()]),
+            "CSP": sorted([str(c) for c in tickets_df['CSP'].unique()]),
+            "AppCode": sorted([str(a) for a in tickets_df['AppCode'].unique()])
+        }
+        return options
+    except Exception as e:
+        logger.error(f"Error in /api/tickets-filter-options: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
-tickets_df = create_ticket_data()
 
 @app.get("/api/tickets")
-def get_tickets(page: int = 1, size: int = 25, sort_by: str = 'id', sort_order: str = 'asc'):
-    """Endpoint to get a paginated list of tickets."""
-    sorted_df = tickets_df.sort_values(by=sort_by, ascending=(sort_order == 'asc'))
+def get_tickets(
+    page: int = 1,
+    size: int = 25,
+    sort_by: str = 'Key',
+    sort_order: str = 'asc',
+    Key: Optional[str] = None,
+    Summary: Optional[str] = None,
+    Priority: Optional[str] = None,
+    CSP: Optional[str] = None,
+    AppCode: Optional[str] = None,
+    year: Optional[int] = None
+):
+    """Endpoint to get a paginated list of tickets with optional filtering and sorting."""
+    try:
+        df = tickets_df.copy()
+
+        # Filter by year if provided
+        if year:
+            df = df[df['tCreated'].dt.year == year]
+
+        # Apply filters using .str.contains for partial, case-insensitive matching
+        if Key:
+            df = df[df['Key'].str.contains(Key, case=False, na=False)]
+        if Summary:
+            df = df[df['Summary'].str.contains(Summary, case=False, na=False)]
+        if Priority:
+            df = df[df['Priority'].str.contains(Priority, case=False, na=False)]
+        if CSP:
+            df = df[df['CSP'].str.contains(CSP, case=False, na=False)]
+        if AppCode:
+            df = df[df['AppCode'].str.contains(AppCode, case=False, na=False)]
+
+        total_count = len(df)
+
+        # Sorting
+        if sort_by in df.columns:
+            df = df.sort_values(by=sort_by, ascending=(sort_order == 'asc'))
+
+        # Pagination
+        start_index = (page - 1) * size
+        end_index = start_index + size
+        paginated_data = df.iloc[start_index:end_index].copy()
+
+        # Convert datetime objects to ISO 8601 strings for JSON compatibility
+        for col in ['tCreated', 'tResolved']:
+            if col in paginated_data.columns:
+                paginated_data[col] = paginated_data[col].apply(lambda x: x.isoformat() if pd.notna(x) else None)
+
+        # Fill NaN values to prevent JSON errors
+        paginated_data.fillna('', inplace=True)
+
+        return {
+            "tickets": paginated_data.to_dict(orient='records'),
+            "total_count": total_count
+        }
+    except Exception as e:
+        logger.error(f"Error in /api/tickets: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/csp-vs-priority")
+async def get_csp_vs_priority():
+    # Group by CSP and Priority to get counts for a stacked bar chart
+    csp_priority_counts = tickets_df.groupby(['CSP', 'Priority']).size().unstack(fill_value=0)
+    # Ensure all standard priorities are present
+    for priority in ['Low', 'Medium', 'High', 'unknown']:
+        if priority not in csp_priority_counts.columns:
+            csp_priority_counts[priority] = 0
+    return csp_priority_counts.to_dict(orient='index')
+
+@app.get("/api/appcode-vs-priority")
+async def get_appcode_vs_priority():
+    # Pivot table to get counts of AppCode vs Priority for a heatmap
+    heatmap_data = tickets_df.groupby(['AppCode', 'Priority']).size().unstack(fill_value=0)
+    # Ensure all standard priorities are present in columns
+    for priority in ['Low', 'Medium', 'High', 'unknown']:
+        if priority not in heatmap_data.columns:
+            heatmap_data[priority] = 0
+    # Order columns for consistency
+    heatmap_data = heatmap_data[['Low', 'Medium', 'High', 'unknown']]
+    return heatmap_data.reset_index().to_dict(orient='records')
+
+@app.get("/api/environment-summary", response_model=EnvironmentSummaryResponse)
+def get_environment_summary(year: Optional[int] = None):
+    """
+    Endpoint to get ticket counts by month, stacked by Environment, for each CSP.
+    Returns a list of all environments found in the data.
+    """
+    logger.info(f"--- Starting /api/environment-summary (year: {year}) ---")
+    try:
+        df = tickets_df.copy()
+
+        # Filter by year if provided
+        if year:
+            df = df[df['tCreated'].dt.year == year]
+
+        df['tCreated'] = pd.to_datetime(df['tCreated'])
+        df['Month'] = df['tCreated'].dt.to_period('M').astype(str)
+        df['Environment'] = df['Environment'].fillna('Unknown')
+        
+        all_environments = sorted(df['Environment'].unique().tolist())
+        logger.info(f"Found unique environments: {all_environments}")
+
+        summary = df.groupby(['CSP', 'Month', 'Environment']).size().unstack(fill_value=0)
+
+        # Ensure all environment columns exist, even if they have no data for a particular month
+        for env in all_environments:
+            if env not in summary.columns:
+                summary[env] = 0
+        
+        summary = summary.reset_index()
+        logger.info(f"Summary table head:\n{summary.head()}")
+
+        df_aws = df[df['CSP'] == 'AWS']
+        df_gcp = df[df['CSP'] == 'GCP']
+
+        aws_total = int(df_aws.shape[0])
+        gcp_total = int(df_gcp.shape[0])
+
+        # Check for division by zero if no tickets for the year
+        aws_monthly_avg = round(aws_total / 12, 1) if aws_total > 0 else 0
+        gcp_monthly_avg = round(gcp_total / 12, 1) if gcp_total > 0 else 0
+
+        aws_stats = CSPStatistics(total_tickets=aws_total, monthly_average=aws_monthly_avg)
+        gcp_stats = CSPStatistics(total_tickets=gcp_total, monthly_average=gcp_monthly_avg)
+
+        aws_summary = summary[summary['CSP'] == 'AWS'].drop(columns='CSP')
+        gcp_summary = summary[summary['CSP'] == 'GCP'].drop(columns='CSP')
+
+        aws_summary_dict = aws_summary.to_dict(orient='records')
+        gcp_summary_dict = gcp_summary.to_dict(orient='records')
+
+        return EnvironmentSummaryResponse(
+            aws=aws_summary_dict, 
+            gcp=gcp_summary_dict,
+            aws_stats=aws_stats,
+            gcp_stats=gcp_stats
+        )
+    except Exception as e:
+        logger.error(f"Error in /api/environment-summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reports/ticket-count-by-appcode")
+async def get_ticket_count_by_appcode(year: int, csp: str):
+    df = get_data(year)
+    df_csp = df[df['CSP'] == csp].copy()
+    df_csp['Month'] = pd.to_datetime(df_csp['tCreated']).dt.strftime('%b')
     
-    start = (page - 1) * size
-    end = start + size
-    paginated_tickets = sorted_df.iloc[start:end]
+    # Ensure all months are present
+    months_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
+    # Group by Month and AppCode and count tickets
+    grouped = df_csp.groupby(['Month', 'AppCode']).size().reset_index(name='count')
+    
+    # Pivot the table to get AppCodes as columns
+    pivot_df = grouped.pivot(index='Month', columns='AppCode', values='count').fillna(0).astype(int)
+    
+    # Ensure all months are in the index
+    pivot_df = pivot_df.reindex(months_order, fill_value=0)
+    
+    # Get the list of all AppCodes
+    app_codes = sorted(df_csp['AppCode'].unique().tolist())
+    
+    # Ensure all app_codes are in the columns
+    pivot_df = pivot_df.reindex(columns=app_codes, fill_value=0)
+    
+    # Convert to list of dicts
+    chart_data = pivot_df.reset_index().to_dict(orient='records')
     
     return {
-        "tickets": paginated_tickets.to_dict(orient='records'),
-        "total": len(tickets_df)
+        "data": chart_data,
+        "app_codes": app_codes
     }
 
-@app.get("/api/tickets-summary")
-def get_tickets_summary():
-    """Endpoint to get a summary of tickets by status for charting."""
-    summary = tickets_df['status'].value_counts().reset_index()
-    summary.columns = ['status', 'count']
-    return summary.to_dict(orient='records')
 
-@app.get("/api/tickets-by-priority")
-def get_tickets_by_priority():
-    """Endpoint to get ticket counts grouped by application and priority for a heatmap."""
-    heatmap_data = tickets_df.groupby(['application', 'priority']).size().reset_index(name='count')
-    return heatmap_data.to_dict(orient='records')
+@app.get("/api/reports/control-count-by-appcode")
+async def get_control_count_by_appcode(year: int, csp: str):
+    df = get_data(year)
+    df_csp = df[df['CSP'] == csp]
+    
+    # Group by AppCode and ConfigRule
+    grouped = df_csp.groupby(['AppCode', 'ConfigRule']).size().reset_index(name='count')
+    
+    # Pivot to get ConfigRules as columns
+    pivot_df = grouped.pivot(index='AppCode', columns='ConfigRule', values='count').fillna(0).astype(int)
+    
+    config_rules = sorted(df_csp['ConfigRule'].unique().tolist())
+    
+    # Ensure all config rules are present in columns
+    pivot_df = pivot_df.reindex(columns=config_rules, fill_value=0)
 
-@app.get("/api/tickets-by-application")
-def get_tickets_by_application():
-    """Endpoint to get ticket counts grouped by application and status."""
-    summary = tickets_df.groupby(['application', 'status']).size().unstack(fill_value=0).reset_index()
-    return summary.to_dict(orient='records')
+    chart_data = pivot_df.reset_index().to_dict(orient='records')
+    
+    return {
+        "data": chart_data,
+        "config_rules": config_rules
+    }
+
+
+@app.get("/api/reports/heatmap")
+async def get_heatmap_data(year: int, csp: str):
+    df = get_data(year)
+    df_csp = df[df['CSP'] == csp]
+    
+    # Create a pivot table for the heatmap
+    heatmap_df = pd.crosstab(df_csp['AppCode'], df_csp['ConfigRule'])
+    
+    app_codes = sorted(heatmap_df.index.tolist())
+    config_rules = sorted(heatmap_df.columns.tolist())
+    
+    # Convert to a list of lists for the heatmap data
+    heatmap_data = heatmap_df.values.tolist()
+    
+    return {
+        "data": heatmap_data,
+        "app_codes": app_codes,
+        "config_rules": config_rules
+    }
 
 @app.post("/api/chatbot")
 def chatbot_response(request: dict):
@@ -131,17 +358,28 @@ def chatbot_response(request: dict):
     return {"responses": responses}
 
 @app.get("/api/tickets/download")
-def download_tickets_csv():
-    """Endpoint to download all tickets as a CSV file."""
-    csv_data = tickets_df.to_csv(index=False)
+def download_tickets_csv(
+    Status: Optional[str] = None,
+    Priority: Optional[str] = None,
+    CSP: Optional[str] = None,
+    AppCode: Optional[str] = None
+):
+    """Endpoint to download tickets as a CSV file, with optional filtering."""
+    df = tickets_df.copy()
+
+    # Apply filters
+    if Status:
+        df = df[df['Status'] == Status]
+    if Priority:
+        df = df[df['Priority'] == Priority]
+    if CSP:
+        df = df[df['CSP'] == CSP]
+    if AppCode:
+        df = df[df['AppCode'] == AppCode]
+
+    csv_data = df.to_csv(index=False)
     return Response(
         content=csv_data,
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=tickets.csv"}
     )
-
-@app.get("/api/tickets-by-application")
-def get_tickets_by_application():
-    """Endpoint to get ticket counts grouped by application and status."""
-    summary = tickets_df.groupby(['application', 'status']).size().unstack(fill_value=0).reset_index()
-    return summary.to_dict(orient='records')

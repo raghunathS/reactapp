@@ -1,13 +1,13 @@
-import { ItemsApiClient } from "./items-api-client";
+import { TicketsApiClient } from "./tickets-api-client";
 
 export class ApiClient {
-  private _itemsClient: ItemsApiClient | undefined;
+  private _ticketsClient: TicketsApiClient;
 
-  public get items() {
-    if (!this._itemsClient) {
-      this._itemsClient = new ItemsApiClient();
-    }
+  constructor() {
+    this._ticketsClient = new TicketsApiClient();
+  }
 
-    return this._itemsClient;
+  public get tickets(): TicketsApiClient {
+    return this._ticketsClient;
   }
 }
