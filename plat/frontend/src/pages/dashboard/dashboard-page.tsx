@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { BreadcrumbGroup, ContentLayout, SpaceBetween } from "@cloudscape-design/components";
 import { useOnFollow } from "../../common/hooks/use-on-follow";
 import BaseAppLayout from "../../components/base-app-layout";
@@ -14,6 +16,38 @@ import { EnvironmentSummaryResponse } from '../../common/types';
 import { useGlobalFilters } from '../../common/contexts/GlobalFilterContext';
 
 export default function DashboardPage() {
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = () => {
+    const input = printRef.current;
+    if (input) {
+      html2canvas(input, { 
+        scale: 2, 
+        useCORS: true,
+        width: input.scrollWidth,
+        height: input.scrollHeight
+      }).then((canvas) => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('l', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgWidth = imgProps.width;
+        const imgHeight = imgProps.height;
+
+        const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+        const newImgWidth = imgWidth * ratio;
+        const newImgHeight = imgHeight * ratio;
+
+        const x = (pdfWidth - newImgWidth) / 2;
+        const y = (pdfHeight - newImgHeight) / 2;
+
+        pdf.addImage(imgData, 'PNG', x, y, newImgWidth, newImgHeight);
+        pdf.save('dashboard-report.pdf');
+      });
+    }
+  };
   const onFollow = useOnFollow();
   const { selectedYear, selectedEnvironment, selectedNarrowEnvironment } = useGlobalFilters();
   const [summaryData, setSummaryData] = useState<EnvironmentSummaryResponse | null>(null);
@@ -49,9 +83,10 @@ export default function DashboardPage() {
       }
       content={
         <ContentLayout 
-          header={<DashboardHeader />}
+          header={<DashboardHeader onPrint={handlePrint} />}
         >
-          <SpaceBetween size="l">
+          <div ref={printRef}>
+            <SpaceBetween size="l">
             <StatisticsCards 
               loading={loading}
               awsStats={summaryData?.aws_stats}
@@ -60,8 +95,8 @@ export default function DashboardPage() {
             <EnvironmentSummaryChart data={summaryData} loading={loading} />
                         <EnvironmentSummaryTable data={summaryData} loading={loading} />
             <TicketsTable />
-            
-          </SpaceBetween>
+            </SpaceBetween>
+          </div>
         </ContentLayout>
       }
     />

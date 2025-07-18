@@ -1,20 +1,25 @@
-import { Header, SpaceBetween } from "@cloudscape-design/components";
+import { Button, Header, SpaceBetween } from "@cloudscape-design/components";
 import RouterButton from "../../components/wrappers/router-button";
 import RouterButtonDropdown from "../../components/wrappers/router-button-dropdown";
 
-export default function DashboardHeader() {
+interface DashboardHeaderProps {
+  onPrint: () => void;
+}
+
+export default function DashboardHeader({ onPrint }: DashboardHeaderProps) {
   return (
     <Header
       variant="h1"
       actions={
         <SpaceBetween direction="horizontal" size="xs">
-          <RouterButton href="/section1">View Items</RouterButton>
+          <Button variant="primary" onClick={onPrint}>Print Report</Button>
+          <RouterButton href="/aws/secops-reports">View Items</RouterButton>
           <RouterButtonDropdown
             items={[
               {
                 id: "add-data",
                 text: "Add Item",
-                href: "/section1/add",
+                href: "/aws/add",
               },
             ]}
           >

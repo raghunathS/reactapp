@@ -53,7 +53,7 @@ const ControlCountWidget = ({ csp }: ControlCountWidgetProps) => {
 
   return (
     <Container header={<Header variant="h2">Control Count by AppCode</Header>}>
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={500}>
         <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="AppCode" angle={-45} textAnchor="end" height={70} />

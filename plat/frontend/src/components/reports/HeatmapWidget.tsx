@@ -119,7 +119,7 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
 
   const options: ApexOptions = {
     chart: {
-      height: 700,
+      height: 900,
       type: 'heatmap',
     },
     plotOptions: {
@@ -159,7 +159,7 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
   return (
     <Container header={<Header variant="h2">Heatmap: AppCode vs. ConfigRule</Header>}>
       <div id="chart">
-        <ReactApexChart options={options} series={data} type="heatmap" height={700} />
+        <ReactApexChart options={options} series={data} type="heatmap" height={900} />
       </div>
       <Table
         items={tableItems}

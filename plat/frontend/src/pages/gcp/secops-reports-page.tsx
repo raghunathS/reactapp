@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import {
   ContentLayout,
   Header,
@@ -6,6 +8,7 @@ import {
   Multiselect,
   Grid,
   BreadcrumbGroup,
+  Button,
 } from '@cloudscape-design/components';
 import { useOnFollow } from '../../common/hooks/use-on-follow';
 import { APP_NAME } from '../../common/constants';
@@ -22,6 +25,39 @@ const reportOptions = [
 ];
 
 const SecOpsReportsPage = () => {
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = () => {
+    const input = printRef.current;
+    if (input) {
+      html2canvas(input, { 
+        scale: 2, 
+        useCORS: true,
+        width: input.scrollWidth, // Capture full width
+        height: input.scrollHeight // Capture full height
+      }).then((canvas) => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('l', 'mm', 'a4'); // 'l' for landscape
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgWidth = imgProps.width;
+        const imgHeight = imgProps.height;
+
+        const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+        const newImgWidth = imgWidth * ratio;
+        const newImgHeight = imgHeight * ratio;
+
+        // Center the image
+        const x = (pdfWidth - newImgWidth) / 2;
+        const y = (pdfHeight - newImgHeight) / 2;
+
+        pdf.addImage(imgData, 'PNG', x, y, newImgWidth, newImgHeight);
+        pdf.save('gcp-secops-report.pdf');
+      });
+    }
+  };
   const onFollow = useOnFollow();
   const [selectedReports, setSelectedReports] = useState([
     { label: 'Ticket Count', value: 'ticket-count' },
@@ -56,9 +92,21 @@ const SecOpsReportsPage = () => {
       }
       content={
         <ContentLayout
-          header={<Header variant="h1">GCP SecOps Reports</Header>}
+          header={
+            <Header
+              variant="h1"
+              actions={
+                <Button variant="primary" onClick={handlePrint}>
+                  Print Report
+                </Button>
+              }
+            >
+              GCP SecOps Reports
+            </Header>
+          }
         >
-          <SpaceBetween size="l">
+          <div ref={printRef}>
+            <SpaceBetween size="l">
             <CSPStatisticsWidget csp="GCP" />
             <Multiselect
               selectedOptions={selectedReports}
@@ -75,6 +123,7 @@ const SecOpsReportsPage = () => {
               ))}
             </Grid>
           </SpaceBetween>
+        </div>
         </ContentLayout>
       }
     />
