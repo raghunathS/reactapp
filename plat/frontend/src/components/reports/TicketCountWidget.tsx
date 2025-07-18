@@ -1,7 +1,7 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { useYearFilter } from '../../common/contexts/year-filter-context';
+import { useGlobalFilters } from '../../common/contexts/GlobalFilterContext';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '@cloudscape-design/components/table';
@@ -12,7 +12,7 @@ interface TicketCountWidgetProps {
 }
 
 const TicketCountWidget = ({ csp }: TicketCountWidgetProps) => {
-  const { selectedYear } = useYearFilter();
+  const { selectedYear, selectedEnvironment, selectedNarrowEnvironment } = useGlobalFilters();
   const [data, setData] = useState<any[]>([]);
   const [appCodes, setAppCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,7 +22,7 @@ const TicketCountWidget = ({ csp }: TicketCountWidgetProps) => {
       setLoading(true);
       try {
         const response = await axios.get(`/api/reports/ticket-count-by-appcode`, {
-          params: { year: selectedYear, csp },
+          params: { year: selectedYear, csp, environment: selectedEnvironment, narrow_environment: selectedNarrowEnvironment },
         });
         setData(response.data.data);
         setAppCodes(response.data.app_codes);
@@ -33,7 +33,21 @@ const TicketCountWidget = ({ csp }: TicketCountWidgetProps) => {
     };
 
     fetchData();
-  }, [selectedYear, csp]);
+  }, [selectedYear, csp, selectedEnvironment, selectedNarrowEnvironment]);
+
+  const tableItems = useMemo(() => {
+    if (data.length === 0) {
+      return [];
+    }
+
+    const totalRow: { [key: string]: string | number } = { Month: 'Total' };
+
+    appCodes.forEach(appCode => {
+      totalRow[appCode] = data.reduce((sum, item) => sum + (item[appCode] || 0), 0);
+    });
+
+    return [...data, totalRow];
+  }, [data, appCodes]);
 
   const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
@@ -52,7 +66,7 @@ const TicketCountWidget = ({ csp }: TicketCountWidgetProps) => {
         </BarChart>
       </ResponsiveContainer>
       <Table
-        items={data}
+        items={tableItems}
         columnDefinitions={[
           { id: 'Month', header: 'Month', cell: (item) => item.Month },
           ...appCodes.map((appCode) => ({

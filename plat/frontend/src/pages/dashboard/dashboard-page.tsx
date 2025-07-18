@@ -11,18 +11,18 @@ import StatisticsCards from './statistics-cards';
 import { ApiClient } from '../../common/api-client/api-client';
 import { EnvironmentSummaryResponse } from '../../common/types';
 
-import { useYearFilter } from '../../common/contexts/year-filter-context';
+import { useGlobalFilters } from '../../common/contexts/GlobalFilterContext';
 
 export default function DashboardPage() {
   const onFollow = useOnFollow();
-  const { selectedYear } = useYearFilter();
+  const { selectedYear, selectedEnvironment, selectedNarrowEnvironment } = useGlobalFilters();
   const [summaryData, setSummaryData] = useState<EnvironmentSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     const apiClient = new ApiClient();
-    apiClient.tickets.getEnvironmentSummary(selectedYear)
+    apiClient.tickets.getEnvironmentSummary(selectedYear, selectedEnvironment, selectedNarrowEnvironment)
       .then((response) => {
         if (response.aws) response.aws.sort((a, b) => a.Month.localeCompare(b.Month));
         if (response.gcp) response.gcp.sort((a, b) => a.Month.localeCompare(b.Month));
@@ -33,7 +33,7 @@ export default function DashboardPage() {
         console.error('Failed to fetch environment summary data:', error);
         setLoading(false);
       });
-  }, [selectedYear]);
+  }, [selectedYear, selectedEnvironment, selectedNarrowEnvironment]);
 
   return (
     <BaseAppLayout

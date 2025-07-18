@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useYearFilter } from "../../../common/contexts/year-filter-context";
+import { useGlobalFilters } from "../../../common/contexts/GlobalFilterContext";
 import {
   Button,
   CollectionPreferences,
@@ -225,7 +225,7 @@ const VISIBLE_CONTENT_OPTIONS: CollectionPreferencesProps.VisibleContentOptionsG
 ];
 
 export default function TicketsTable() {
-  const { selectedYear } = useYearFilter();
+  const { selectedYear, selectedEnvironment, selectedNarrowEnvironment } = useGlobalFilters();
   const [loading, setLoading] = useState(true);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [totalTickets, setTotalTickets] = useState(0);
@@ -251,6 +251,8 @@ export default function TicketsTable() {
       sort_by: sortingColumn.sortingField || 'Key',
       sort_order: isDescending ? 'desc' : 'asc',
       year: String(selectedYear),
+      environment: selectedEnvironment === 'All' ? '' : selectedEnvironment,
+      narrow_environment: selectedNarrowEnvironment === 'All' ? '' : selectedNarrowEnvironment,
       ...filters,
     });
 
@@ -268,7 +270,7 @@ export default function TicketsTable() {
 
   useEffect(() => {
     fetchTickets();
-  }, [currentPageIndex, sortingColumn, isDescending, filters, preferences.pageSize, selectedYear]);
+  }, [currentPageIndex, sortingColumn, isDescending, filters, preferences.pageSize, selectedYear, selectedEnvironment, selectedNarrowEnvironment]);
 
   const handleSortingChange = (detail: TableProps.SortingState<Ticket>) => {
     if (detail.sortingColumn) {
@@ -282,6 +284,8 @@ export default function TicketsTable() {
         sort_by: sortingColumn.sortingField || 'Key',
         sort_order: isDescending ? 'desc' : 'asc',
         year: String(selectedYear),
+        global_environment: selectedEnvironment === 'All' ? '' : selectedEnvironment,
+        global_narrow_environment: selectedNarrowEnvironment === 'All' ? '' : selectedNarrowEnvironment,
         ...filters
     });
 

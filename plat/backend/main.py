@@ -39,13 +39,17 @@ def startup_event():
         print("Error: ticket_data.csv not found. Starting with an empty DataFrame.")
         tickets_df = pd.DataFrame()
 
-def get_data(year: Optional[int] = None) -> pd.DataFrame:
+def get_data(year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None) -> pd.DataFrame:
     """
     Helper function to get a copy of the dataframe, filtered by year if provided.
     """
     df = tickets_df.copy()
     if year:
         df = df[df['tCreated'].dt.year == year]
+    if environment and environment != 'All':
+        df = df[df['Environment'] == environment]
+    if narrow_environment and narrow_environment != 'All':
+        df = df[df['NarrowEnvironment'] == narrow_environment]
     return df
 
 # Allow requests from the React frontend
@@ -112,7 +116,9 @@ def get_ticket_filter_options():
         options = {
             "Priority": sorted([str(p) for p in tickets_df['Priority'].unique()]),
             "CSP": sorted([str(c) for c in tickets_df['CSP'].unique()]),
-            "AppCode": sorted([str(a) for a in tickets_df['AppCode'].unique()])
+            "AppCode": sorted([str(a) for a in tickets_df['AppCode'].unique()]),
+            "Environment": sorted([str(e) for e in tickets_df['Environment'].dropna().unique()]),
+            "NarrowEnvironment": sorted([str(n) for n in tickets_df['NarrowEnvironment'].dropna().unique()]),
         }
         return options
     except Exception as e:
@@ -126,22 +132,29 @@ def get_tickets(
     size: int = 25,
     sort_by: str = 'Key',
     sort_order: str = 'asc',
+    # Global filters passed from the header dropdowns
+    year: Optional[int] = None,
+    global_environment: Optional[str] = None,
+    global_narrow_environment: Optional[str] = None,
+    # Per-column filters from the table's filter inputs
     Key: Optional[str] = None,
     Summary: Optional[str] = None,
     Priority: Optional[str] = None,
     CSP: Optional[str] = None,
     AppCode: Optional[str] = None,
-    year: Optional[int] = None
+    Environment: Optional[str] = None,
+    NarrowEnvironment: Optional[str] = None,
+    AlertType: Optional[str] = None,
+    ConfigRule: Optional[str] = None,
+    Account: Optional[str] = None
 ):
     """Endpoint to get a paginated list of tickets with optional filtering and sorting."""
     try:
-        df = tickets_df.copy()
+        # 1. Apply global filters first.
+        df = get_data(year, global_environment, global_narrow_environment)
 
-        # Filter by year if provided
-        if year:
-            df = df[df['tCreated'].dt.year == year]
-
-        # Apply filters using .str.contains for partial, case-insensitive matching
+        # 2. Apply per-column filters from the table UI.
+        # Note: The 'Environment' and 'NarrowEnvironment' params here are from the table's column filters.
         if Key:
             df = df[df['Key'].str.contains(Key, case=False, na=False)]
         if Summary:
@@ -152,6 +165,16 @@ def get_tickets(
             df = df[df['CSP'].str.contains(CSP, case=False, na=False)]
         if AppCode:
             df = df[df['AppCode'].str.contains(AppCode, case=False, na=False)]
+        if Environment: # This is the per-column filter
+            df = df[df['Environment'].str.contains(Environment, case=False, na=False)]
+        if NarrowEnvironment: # This is the per-column filter
+            df = df[df['NarrowEnvironment'].str.contains(NarrowEnvironment, case=False, na=False)]
+        if AlertType:
+            df = df[df['AlertType'].str.contains(AlertType, case=False, na=False)]
+        if ConfigRule:
+            df = df[df['ConfigRule'].str.contains(ConfigRule, case=False, na=False)]
+        if Account:
+            df = df[df['Account'].str.contains(Account, case=False, na=False)]
 
         total_count = len(df)
 
@@ -203,18 +226,14 @@ async def get_appcode_vs_priority():
     return heatmap_data.reset_index().to_dict(orient='records')
 
 @app.get("/api/environment-summary", response_model=EnvironmentSummaryResponse)
-def get_environment_summary(year: Optional[int] = None):
+def get_environment_summary(year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
     """
     Endpoint to get ticket counts by month, stacked by Environment, for each CSP.
     Returns a list of all environments found in the data.
     """
     logger.info(f"--- Starting /api/environment-summary (year: {year}) ---")
     try:
-        df = tickets_df.copy()
-
-        # Filter by year if provided
-        if year:
-            df = df[df['tCreated'].dt.year == year]
+        df = get_data(year, environment, narrow_environment)
 
         df['tCreated'] = pd.to_datetime(df['tCreated'])
         df['Month'] = df['tCreated'].dt.to_period('M').astype(str)
@@ -263,8 +282,8 @@ def get_environment_summary(year: Optional[int] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/reports/ticket-count-by-appcode")
-async def get_ticket_count_by_appcode(year: int, csp: str):
-    df = get_data(year)
+async def get_ticket_count_by_appcode(year: int, csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
+    df = get_data(year, environment, narrow_environment)
     df_csp = df[df['CSP'] == csp].copy()
     df_csp['Month'] = pd.to_datetime(df_csp['tCreated']).dt.strftime('%b')
     
@@ -296,8 +315,8 @@ async def get_ticket_count_by_appcode(year: int, csp: str):
 
 
 @app.get("/api/reports/control-count-by-appcode")
-async def get_control_count_by_appcode(year: int, csp: str):
-    df = get_data(year)
+async def get_control_count_by_appcode(year: int, csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
+    df = get_data(year, environment, narrow_environment)
     df_csp = df[df['CSP'] == csp]
     
     # Group by AppCode and ConfigRule
@@ -320,8 +339,8 @@ async def get_control_count_by_appcode(year: int, csp: str):
 
 
 @app.get("/api/reports/heatmap")
-async def get_heatmap_data(year: int, csp: str):
-    df = get_data(year)
+async def get_heatmap_data(year: int, csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
+    df = get_data(year, environment, narrow_environment)
     df_csp = df[df['CSP'] == csp]
     
     # Create a pivot table for the heatmap
@@ -359,23 +378,38 @@ def chatbot_response(request: dict):
 
 @app.get("/api/tickets/download")
 def download_tickets_csv(
-    Status: Optional[str] = None,
+    year: Optional[int] = None,
+    environment: Optional[str] = None,
+    narrow_environment: Optional[str] = None,
+    Key: Optional[str] = None,
+    Summary: Optional[str] = None,
     Priority: Optional[str] = None,
     CSP: Optional[str] = None,
-    AppCode: Optional[str] = None
+    AppCode: Optional[str] = None,
+    AlertType: Optional[str] = None,
+    ConfigRule: Optional[str] = None,
+    Account: Optional[str] = None
 ):
     """Endpoint to download tickets as a CSV file, with optional filtering."""
-    df = tickets_df.copy()
+    df = get_data(year, environment, narrow_environment)
 
-    # Apply filters
-    if Status:
-        df = df[df['Status'] == Status]
+    # Apply column-specific filters
+    if Key:
+        df = df[df['Key'].str.contains(Key, case=False, na=False)]
+    if Summary:
+        df = df[df['Summary'].str.contains(Summary, case=False, na=False)]
     if Priority:
-        df = df[df['Priority'] == Priority]
+        df = df[df['Priority'].str.contains(Priority, case=False, na=False)]
     if CSP:
-        df = df[df['CSP'] == CSP]
+        df = df[df['CSP'].str.contains(CSP, case=False, na=False)]
     if AppCode:
-        df = df[df['AppCode'] == AppCode]
+        df = df[df['AppCode'].str.contains(AppCode, case=False, na=False)]
+    if AlertType:
+        df = df[df['AlertType'].str.contains(AlertType, case=False, na=False)]
+    if ConfigRule:
+        df = df[df['ConfigRule'].str.contains(ConfigRule, case=False, na=False)]
+    if Account:
+        df = df[df['Account'].str.contains(Account, case=False, na=False)]
 
     csv_data = df.to_csv(index=False)
     return Response(

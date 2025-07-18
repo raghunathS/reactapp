@@ -13,6 +13,7 @@ import BaseAppLayout from '../../components/base-app-layout';
 import TicketCountWidget from '../../components/reports/TicketCountWidget';
 import ControlCountWidget from '../../components/reports/ControlCountWidget';
 import HeatmapWidget from '../../components/reports/HeatmapWidget';
+import CSPStatisticsWidget from '../../components/reports/CSPStatisticsWidget';
 
 const reportOptions = [
   { label: 'Ticket Count', value: 'ticket-count' },
@@ -58,6 +59,7 @@ const SecOpsReportsPage = () => {
           header={<Header variant="h1">GCP SecOps Reports</Header>}
         >
           <SpaceBetween size="l">
+            <CSPStatisticsWidget csp="GCP" />
             <Multiselect
               selectedOptions={selectedReports}
               onChange={({ detail }) =>

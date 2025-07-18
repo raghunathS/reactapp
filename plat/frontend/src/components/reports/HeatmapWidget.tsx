@@ -1,7 +1,7 @@
 import ReactApexChart from 'react-apexcharts';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { useYearFilter } from '../../common/contexts/year-filter-context';
+import { useGlobalFilters } from '../../common/contexts/GlobalFilterContext';
 import { ApexOptions } from 'apexcharts';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -27,7 +27,7 @@ interface HeatmapSeries {
 
 
 const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
-  const { selectedYear } = useYearFilter();
+  const { selectedYear, selectedEnvironment, selectedNarrowEnvironment } = useGlobalFilters();
   const [data, setData] = useState<HeatmapSeries[]>([]);
   const [configRules, setConfigRules] = useState<string[]>([]);
   const [appCodes, setAppCodes] = useState<string[]>([]);
@@ -38,7 +38,7 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
       setLoading(true);
       try {
         const response = await axios.get(`/api/reports/heatmap`, {
-          params: { year: selectedYear, csp },
+          params: { year: selectedYear, csp, environment: selectedEnvironment, narrow_environment: selectedNarrowEnvironment },
         });
         
 
@@ -64,9 +64,10 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
     };
 
     fetchData();
-  }, [selectedYear, csp]);
+  }, [selectedYear, csp, selectedEnvironment, selectedNarrowEnvironment]);
 
-  const tableData = appCodes.map((appCode) => {
+  const tableItems = useMemo(() => {
+    const tableData = appCodes.map((appCode) => {
     const row: { [key: string]: any } = { AppCode: appCode };
     const seriesData = data.find(s => s.name === appCode)?.data || [];
     configRules.forEach(rule => {
@@ -75,6 +76,19 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
     });
     return row;
   });
+
+    if (tableData.length === 0) {
+      return [];
+    }
+
+    const totalRow: { [key: string]: string | number } = { AppCode: 'Total' };
+
+    configRules.forEach(rule => {
+      totalRow[rule] = tableData.reduce((sum, item) => sum + (item[rule] || 0), 0);
+    });
+
+    return [...tableData, totalRow];
+  }, [data, appCodes, configRules]);
 
   const allValues = data.flatMap(series => series.data.map(d => d.y)).filter(y => y > 0);
   const maxValue = allValues.length > 0 ? Math.max(...allValues) : 0;
@@ -148,7 +162,7 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
         <ReactApexChart options={options} series={data} type="heatmap" height={700} />
       </div>
       <Table
-        items={tableData}
+        items={tableItems}
         columnDefinitions={[
           { id: 'AppCode', header: 'AppCode', cell: (item) => item.AppCode },
           ...configRules.map((rule) => ({

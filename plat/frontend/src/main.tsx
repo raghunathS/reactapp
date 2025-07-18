@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { StorageHelper } from "./common/helpers/storage-helper";
 import App from "./app";
-import { YearFilterProvider } from "./common/contexts/year-filter-context";
+import { GlobalFilterProvider } from './common/contexts/GlobalFilterContext';
 import "@cloudscape-design/global-styles/index.css";
 
 const root = ReactDOM.createRoot(
@@ -14,8 +14,8 @@ StorageHelper.applyTheme(theme);
 
 root.render(
   <React.StrictMode>
-    <YearFilterProvider>
+    <GlobalFilterProvider>
       <App />
-    </YearFilterProvider>
+    </GlobalFilterProvider>
   </React.StrictMode>
 );
