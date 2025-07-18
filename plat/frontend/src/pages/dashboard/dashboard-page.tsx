@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { BreadcrumbGroup, ContentLayout, SpaceBetween } from "@cloudscape-design/components";
+import { BreadcrumbGroup, ContentLayout, SpaceBetween, Grid } from "@cloudscape-design/components";
 import { useOnFollow } from "../../common/hooks/use-on-follow";
 import BaseAppLayout from "../../components/base-app-layout";
 import DashboardHeader from "./dashboard-header";
@@ -14,6 +14,7 @@ import { ApiClient } from '../../common/api-client/api-client';
 import { EnvironmentSummaryResponse } from '../../common/types';
 
 import { useGlobalFilters } from '../../common/contexts/GlobalFilterContext';
+import HeartbeatChart from './HeartbeatChart';
 
 export default function DashboardPage() {
   const printRef = useRef<HTMLDivElement>(null);
@@ -94,6 +95,10 @@ export default function DashboardPage() {
             />
             <EnvironmentSummaryChart data={summaryData} loading={loading} />
                         <EnvironmentSummaryTable data={summaryData} loading={loading} />
+            <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
+              <HeartbeatChart csp="aws" title="AWS Heartbeat Status" />
+              <HeartbeatChart csp="gcp" title="GCP Heartbeat Status" />
+            </Grid>
             <TicketsTable />
             </SpaceBetween>
           </div>
