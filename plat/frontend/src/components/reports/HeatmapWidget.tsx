@@ -1,7 +1,8 @@
-import { Scatter, ScatterChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, ZAxis } from 'recharts';
+import ReactApexChart from 'react-apexcharts';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useYearFilter } from '../../common/contexts/year-filter-context';
+import { ApexOptions } from 'apexcharts';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '@cloudscape-design/components/table';
@@ -11,22 +12,25 @@ interface HeatmapWidgetProps {
   csp: 'AWS' | 'GCP';
 }
 
-const CustomTick = (props: any) => {
-  const { x, y, payload } = props;
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text x={0} y={0} dy={16} textAnchor="end" fill="#666" transform="rotate(-45)">
-        {payload.value}
-      </text>
-    </g>
-  );
-};
+interface HeatmapDataPoint {
+  x: string;
+  y: number;
+}
+
+interface HeatmapSeries {
+  name: string;
+  data: HeatmapDataPoint[];
+}
+
+
+
+
 
 const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
   const { selectedYear } = useYearFilter();
-  const [data, setData] = useState<any[]>([]);
-  const [appCodes, setAppCodes] = useState<string[]>([]);
+  const [data, setData] = useState<HeatmapSeries[]>([]);
   const [configRules, setConfigRules] = useState<string[]>([]);
+  const [appCodes, setAppCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,23 +41,19 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
           params: { year: selectedYear, csp },
         });
         
-        const { data, app_codes, config_rules } = response.data;
-        
-        const chartData = [];
-        let maxCount = 0;
-        for (let i = 0; i < data.length; i++) {
-          for (let j = 0; j < data[i].length; j++) {
-            const count = data[i][j];
-            if (count > 0) {
-                chartData.push({ x: config_rules[j], y: app_codes[i], z: count });
-            }
-            if (count > maxCount) {
-                maxCount = count;
-            }
-          }
-        }
 
-        setData(chartData);
+        
+        const { data: matrix, app_codes, config_rules } = response.data;
+
+        const series = app_codes.map((appCode: string, i: number) => ({
+          name: appCode,
+          data: config_rules.map((rule: string, j: number) => ({
+            x: rule,
+            y: matrix[i][j],
+          })),
+        }));
+
+        setData(series);
         setAppCodes(app_codes);
         setConfigRules(config_rules);
 
@@ -67,27 +67,86 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
   }, [selectedYear, csp]);
 
   const tableData = appCodes.map((appCode) => {
-      const row: { [key: string]: any } = { AppCode: appCode };
-      configRules.forEach((rule) => {
-          const point = data.find(d => d.y === appCode && d.x === rule);
-          row[rule] = point ? point.z : 0;
-      });
-      return row;
+    const row: { [key: string]: any } = { AppCode: appCode };
+    const seriesData = data.find(s => s.name === appCode)?.data || [];
+    configRules.forEach(rule => {
+      const point = seriesData.find(d => d.x === rule);
+      row[rule] = point ? point.y : 0;
+    });
+    return row;
   });
+
+  const allValues = data.flatMap(series => series.data.map(d => d.y)).filter(y => y > 0);
+  const maxValue = allValues.length > 0 ? Math.max(...allValues) : 0;
+  const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
+
+  const getColorScaleRanges = () => {
+    if (maxValue <= minValue) {
+      return [
+        { from: 0, to: 0, color: '#E5E7EB' }, // Gray for zero
+        { from: minValue, to: maxValue, color: '#60A5FA' } // Single blue color if no range
+      ];
+    }
+
+    const range = maxValue - minValue;
+    const step = range / 4;
+    const p1 = minValue + step;
+    const p2 = minValue + 2 * step;
+    const p3 = minValue + 3 * step;
+
+    return [
+      { from: 0, to: 0, color: '#E5E7EB', name: 'zero' }, // Gray for zero
+      { from: minValue, to: p1, color: '#3B82F6', name: 'cool-1' }, // Dark Blue
+      { from: p1, to: p2, color: '#93C5FD', name: 'cool-2' }, // Light Blue
+      { from: p2, to: p3, color: '#FCA5A5', name: 'warm-1' }, // Light Red
+      { from: p3, to: maxValue, color: '#EF4444', name: 'warm-2' }, // Dark Red
+    ];
+  };
+
+  const options: ApexOptions = {
+    chart: {
+      height: 700,
+      type: 'heatmap',
+    },
+    plotOptions: {
+      heatmap: {
+        radius: 0,
+        enableShades: false,
+        colorScale: {
+          ranges: getColorScaleRanges(),
+        },
+      },
+    },
+    dataLabels: {
+      enabled: false,
+    },
+    xaxis: {
+      type: 'category',
+      categories: configRules,
+      labels: {
+        rotate: -45,
+        style: {
+          fontSize: '12px',
+        },
+      },
+    },
+    yaxis: {
+      labels: {
+        style: {
+          fontSize: '12px',
+        },
+      },
+    },
+    title: {
+      text: 'Heatmap Chart',
+    },
+  };
 
   return (
     <Container header={<Header variant="h2">Heatmap: AppCode vs. ConfigRule</Header>}>
-      <ResponsiveContainer width="100%" height={400}>
-        <ScatterChart margin={{ top: 20, right: 20, bottom: 80, left: 100 }}>
-            <CartesianGrid />
-            <XAxis dataKey="x" type="category" name="ConfigRule" tick={<CustomTick />} interval={0} />
-            <YAxis dataKey="y" type="category" name="AppCode" />
-            <ZAxis dataKey="z" type="number" range={[0, 500]} />
-            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-            <Legend />
-            <Scatter name="Ticket Count" data={data} fill="#8884d8" shape="square" />
-        </ScatterChart>
-      </ResponsiveContainer>
+      <div id="chart">
+        <ReactApexChart options={options} series={data} type="heatmap" height={700} />
+      </div>
       <Table
         items={tableData}
         columnDefinitions={[
@@ -95,11 +154,17 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
           ...configRules.map((rule) => ({
             id: rule,
             header: rule,
-            cell: (item: any) => item[rule],
+            cell: (item: any) => item[rule] || 0,
           })),
+          {
+            id: 'Total',
+            header: 'Total',
+            cell: (item) => configRules.reduce((total, rule) => total + (item[rule] || 0), 0),
+          },
         ]}
         loading={loading}
         loadingText="Loading data..."
+        stickyColumns={{ first: 1 }}
         variant="embedded"
         empty={
           <Box textAlign="center" color="inherit">

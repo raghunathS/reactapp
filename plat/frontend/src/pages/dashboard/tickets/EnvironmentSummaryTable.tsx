@@ -23,18 +23,6 @@ const EnvironmentSummaryTable: FC<EnvironmentSummaryTableProps> = ({ data, loadi
     return <Container>No summary data available to display in a table.</Container>;
   }
 
-  // Dynamically derive environments from the data
-  const allEnvs = new Set<string>();
-  const combinedData = [...(data.aws || []), ...(data.gcp || [])];
-  combinedData.forEach(item => {
-    Object.keys(item).forEach(key => {
-      if (key !== 'Month') {
-        allEnvs.add(key);
-      }
-    });
-  });
-  const environments = Array.from(allEnvs).sort();
-
   const renderTable = (title: string, tableData: MonthlyEnvChartItem[]) => {
     if (tableData.length === 0) {
       return (
@@ -43,6 +31,17 @@ const EnvironmentSummaryTable: FC<EnvironmentSummaryTableProps> = ({ data, loadi
         </Container>
       );
     }
+
+    // Dynamically derive environments from the specific table's data
+    const envsInTable = new Set<string>();
+    tableData.forEach(item => {
+      Object.keys(item).forEach(key => {
+        if (key !== 'Month') {
+          envsInTable.add(key);
+        }
+      });
+    });
+    const environments = Array.from(envsInTable).sort();
 
     const columnDefinitions: TableProps.ColumnDefinition<MonthlyEnvChartItem>[] = [
       { id: 'Month', header: 'Month', cell: item => item.Month, sortingField: 'Month' },

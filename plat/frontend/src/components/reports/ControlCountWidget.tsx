@@ -40,10 +40,10 @@ const ControlCountWidget = ({ csp }: ControlCountWidgetProps) => {
   return (
     <Container header={<Header variant="h2">Control Count by AppCode</Header>}>
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+        <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis type="number" />
-          <YAxis type="category" dataKey="AppCode" width={150} />
+          <XAxis dataKey="AppCode" angle={-45} textAnchor="end" height={70} />
+          <YAxis />
           <Tooltip />
           <Legend />
           {configRules.map((rule, index) => (
@@ -58,11 +58,17 @@ const ControlCountWidget = ({ csp }: ControlCountWidgetProps) => {
           ...configRules.map((rule) => ({
             id: rule,
             header: rule,
-            cell: (item: any) => item[rule],
+            cell: (item: any) => item[rule] || 0,
           })),
+          {
+            id: 'Total',
+            header: 'Total',
+            cell: (item) => configRules.reduce((total, rule) => total + (item[rule] || 0), 0),
+          },
         ]}
         loading={loading}
         loadingText="Loading data..."
+        stickyColumns={{ first: 1 }}
         variant="embedded"
         empty={
           <Box textAlign="center" color="inherit">

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Container, Header } from '@cloudscape-design/components';
 
@@ -14,7 +14,11 @@ const ApplicationStatusChart = () => {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const result = await response.json();
-        setData(result);
+        const dataWithTotal = result.map((item: any) => ({
+          ...item,
+          Total: (item.Open || 0) + (item['In Progress'] || 0) + (item.Closed || 0),
+        }));
+        setData(dataWithTotal);
       } catch (error) {
         console.error("Failed to fetch application status data:", error);
       } finally {

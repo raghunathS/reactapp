@@ -58,11 +58,17 @@ const TicketCountWidget = ({ csp }: TicketCountWidgetProps) => {
           ...appCodes.map((appCode) => ({
             id: appCode,
             header: appCode,
-            cell: (item: any) => item[appCode],
+            cell: (item: any) => item[appCode] || 0,
           })),
+          {
+            id: 'Total',
+            header: 'Total',
+            cell: (item) => appCodes.reduce((total, appCode) => total + (item[appCode] || 0), 0),
+          },
         ]}
         loading={loading}
         loadingText="Loading data..."
+        stickyColumns={{ first: 1 }}
         variant="embedded"
         empty={
           <Box textAlign="center" color="inherit">

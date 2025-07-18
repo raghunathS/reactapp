@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Container, Header } from '@cloudscape-design/components';
 
@@ -14,7 +14,11 @@ const CspPriorityChart = () => {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const result = await response.json();
-        setData(result);
+        const dataWithTotal = result.map((item: any) => ({
+          ...item,
+          Total: (item.P1 || 0) + (item.P2 || 0) + (item.P3 || 0) + (item.P4 || 0),
+        }));
+        setData(dataWithTotal);
       } catch (error) {
         console.error("Failed to fetch CSP vs. Priority data:", error);
       } finally {
