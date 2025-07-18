@@ -1,20 +1,29 @@
 import { useState, useEffect, useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { BreadcrumbGroup, ContentLayout, SpaceBetween, Grid } from "@cloudscape-design/components";
+import { BreadcrumbGroup, ContentLayout } from "@cloudscape-design/components";
 import { useOnFollow } from "../../common/hooks/use-on-follow";
 import BaseAppLayout from "../../components/base-app-layout";
 import DashboardHeader from "./dashboard-header";
-import EnvironmentSummaryChart from "./tickets/EnvironmentSummaryChart";
-
-import EnvironmentSummaryTable from './tickets/EnvironmentSummaryTable';
-import TicketsTable from './tickets/tickets-table';
-import StatisticsCards from './statistics-cards';
 import { ApiClient } from '../../common/api-client/api-client';
 import { EnvironmentSummaryResponse } from '../../common/types';
 
 import { useGlobalFilters } from '../../common/contexts/GlobalFilterContext';
-import HeartbeatChart from './HeartbeatChart';
+import ConfigurableDashboard from '../../components/configurable-dashboard';
+import { WIDGET_REGISTRY } from '../../components/configurable-dashboard/widgets';
+
+const defaultLayout = {
+  lg: [
+    { i: 'statistics', x: 0, y: 0, w: 12, h: 1 },
+    { i: 'awsTicketsByMonthChart', x: 0, y: 1, w: 6, h: 2 },
+    { i: 'gcpTicketsByMonthChart', x: 6, y: 1, w: 6, h: 2 },
+    { i: 'awsTicketsDataTable', x: 0, y: 3, w: 6, h: 2 },
+    { i: 'gcpTicketsDataTable', x: 6, y: 3, w: 6, h: 2 },
+    { i: 'awsHeartbeat', x: 0, y: 5, w: 6, h: 2 },
+    { i: 'gcpHeartbeat', x: 6, y: 5, w: 6, h: 2 },
+    { i: 'ticketsTable', x: 0, y: 7, w: 12, h: 4 },
+  ],
+};
 
 export default function DashboardPage() {
   const printRef = useRef<HTMLDivElement>(null);
@@ -87,20 +96,18 @@ export default function DashboardPage() {
           header={<DashboardHeader onPrint={handlePrint} />}
         >
           <div ref={printRef}>
-            <SpaceBetween size="l">
-            <StatisticsCards 
-              loading={loading}
-              awsStats={summaryData?.aws_stats}
-              gcpStats={summaryData?.gcp_stats}
+            <ConfigurableDashboard
+              widgetRegistry={WIDGET_REGISTRY}
+              storageKey="dashboard-preferences"
+              headerText="Tickets Dashboard"
+              initialLayouts={defaultLayout}
+              widgetProps={{
+                loading: loading,
+                awsStats: summaryData?.aws_stats,
+                gcpStats: summaryData?.gcp_stats,
+                data: summaryData,
+              }}
             />
-            <EnvironmentSummaryChart data={summaryData} loading={loading} />
-                        <EnvironmentSummaryTable data={summaryData} loading={loading} />
-            <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
-              <HeartbeatChart csp="aws" title="AWS Heartbeat Status" />
-              <HeartbeatChart csp="gcp" title="GCP Heartbeat Status" />
-            </Grid>
-            <TicketsTable />
-            </SpaceBetween>
           </div>
         </ContentLayout>
       }

@@ -1,0 +1,14 @@
+.react-grid-item .drag-handle {
+  cursor: move;
+  margin-right: 8px;
+}
+
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+  color: #545b64;
+}

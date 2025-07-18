@@ -1,28 +1,17 @@
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
   ContentLayout,
   Header,
-  SpaceBetween,
-  Multiselect,
-  Grid,
   BreadcrumbGroup,
   Button,
 } from '@cloudscape-design/components';
 import { useOnFollow } from '../../common/hooks/use-on-follow';
 import { APP_NAME } from '../../common/constants';
 import BaseAppLayout from '../../components/base-app-layout';
-import TicketCountWidget from '../../components/reports/TicketCountWidget';
-import ControlCountWidget from '../../components/reports/ControlCountWidget';
-import HeatmapWidget from '../../components/reports/HeatmapWidget';
-import CSPStatisticsWidget from '../../components/reports/CSPStatisticsWidget';
-
-const reportOptions = [
-  { label: 'Ticket Count', value: 'ticket-count' },
-  { label: 'Control Count', value: 'control-count' },
-  { label: 'Heatmap', value: 'heatmap' },
-];
+import ConfigurableDashboard from '../../components/configurable-dashboard';
+import { SECOPS_WIDGET_REGISTRY } from '../../components/configurable-dashboard/secops-widgets';
 
 const SecOpsReportsPage = () => {
   const printRef = useRef<HTMLDivElement>(null);
@@ -59,23 +48,17 @@ const SecOpsReportsPage = () => {
     }
   };
   const onFollow = useOnFollow();
-  const [selectedReports, setSelectedReports] = useState([
-    { label: 'Ticket Count', value: 'ticket-count' },
-    { label: 'Control Count', value: 'control-count' },
-    { label: 'Heatmap', value: 'heatmap' },
-  ]);
 
-  const renderReport = (reportValue: string) => {
-    switch (reportValue) {
-      case 'ticket-count':
-        return <TicketCountWidget csp="GCP" />;
-      case 'control-count':
-        return <ControlCountWidget csp="GCP" />;
-      case 'heatmap':
-        return <HeatmapWidget csp="GCP" />;
-      default:
-        return null;
-    }
+  const defaultLayout = {
+    lg: [
+      { i: 'statistics', x: 0, y: 0, w: 12, h: 1 },
+      { i: 'ticketCountChart', x: 0, y: 1, w: 6, h: 2 },
+      { i: 'ticketCountTable', x: 6, y: 1, w: 6, h: 2 },
+      { i: 'controlCountChart', x: 0, y: 3, w: 6, h: 2 },
+      { i: 'controlCountTable', x: 6, y: 3, w: 6, h: 2 },
+      { i: 'heatmapChart', x: 0, y: 5, w: 6, h: 3 },
+      { i: 'heatmapTable', x: 6, y: 5, w: 6, h: 3 },
+    ],
   };
 
   return (
@@ -106,24 +89,13 @@ const SecOpsReportsPage = () => {
           }
         >
           <div ref={printRef}>
-            <SpaceBetween size="l">
-            <CSPStatisticsWidget csp="GCP" />
-            <Multiselect
-              selectedOptions={selectedReports}
-              onChange={({ detail }) =>
-                setSelectedReports(detail.selectedOptions as any)
-              }
-              options={reportOptions}
-              placeholder="Choose reports to display"
-              selectedAriaLabel="Selected"
+            <ConfigurableDashboard
+              widgetRegistry={SECOPS_WIDGET_REGISTRY}
+              initialLayouts={defaultLayout}
+              storageKey="gcp-secops-dashboard-layout"
+              widgetProps={{ csp: 'GCP' }}
             />
-            <Grid gridDefinition={selectedReports.map(() => ({ colspan: 12 }))}>
-              {selectedReports.map((report) => (
-                <div key={report.value}>{renderReport(report.value)}</div>
-              ))}
-            </Grid>
-          </SpaceBetween>
-        </div>
+          </div>
         </ContentLayout>
       }
     />
