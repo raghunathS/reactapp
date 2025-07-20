@@ -37,6 +37,17 @@ export default function NavigationPanel() {
         ],
       },
       {
+        type: 'section',
+        text: 'FinOps',
+        items: [
+          {
+            type: 'link',
+            text: 'Dashboard',
+            href: '/finops',
+          },
+        ],
+      },
+      {
         type: "section",
         text: "Agents",
         items: [

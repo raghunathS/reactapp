@@ -15,7 +15,7 @@ import Item1Page from "./pages/gcp/secops-reports-page";
 import ChatbotPage from './pages/agents/chatbot-page';
 import ConfluencePage from './pages/whitepapers/confluence-page';
 import HeartbeatPage from './pages/Heartbeat';
-
+import FinOpsPage from './pages/FinOps';
 import AtcPage from './pages/atc/atc-page';
 import NotFound from "./pages/not-found";
 import "./styles/app.scss";
@@ -40,6 +40,7 @@ export default function App() {
             <Route path="/agents/:agentName" element={<ChatbotPage />} />
             <Route path="/whitepapers/confluence" element={<ConfluencePage />} />
             <Route path="/heartbeat" element={<HeartbeatPage />} />
+            <Route path="/finops" element={<FinOpsPage />} />
             <Route path="/atc/:provider" element={<AtcPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
