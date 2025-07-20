@@ -4,8 +4,9 @@ import { useParams } from 'react-router-dom';
 import Header from '@cloudscape-design/components/header';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
-import Modal from '@cloudscape-design/components/modal';
 import Box from '@cloudscape-design/components/box';
+
+import * as yaml from 'js-yaml';
 import ReactFlow, { 
   Controls, 
   Background, 
@@ -56,8 +57,6 @@ const AtcPage: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [isLoadModalVisible, setIsLoadModalVisible] = useState(false);
-  const [savedArchitectures, setSavedArchitectures] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -142,58 +141,110 @@ const AtcPage: React.FC = () => {
   };
 
   const handleSave = async () => {
-    const architectureName = prompt('Enter a name for your architecture:');
-    if (!architectureName) {
-      alert('Save cancelled.');
+    if (!('showDirectoryPicker' in window)) {
+      alert('Your browser does not support the File System Access API. Please use a modern browser like Chrome or Edge.');
       return;
     }
 
     try {
-      const payload = { nodes, edges };
-      await axios.post(`/api/atc/gcp/architectures/${architectureName}`, payload);
-      alert(`Architecture '${architectureName}' saved successfully!`);
+      const dirHandle = await (window as any).showDirectoryPicker();
+
+      // 1. Create diagram.json
+      const diagram = { nodes, edges };
+      const diagramFileHandle = await dirHandle.getFileHandle('diagram.json', { create: true });
+      const diagramWritable = await diagramFileHandle.createWritable();
+      await diagramWritable.write(JSON.stringify(diagram, null, 2));
+      await diagramWritable.close();
+
+      // 2. Create a YAML file for each component's properties
+      for (const node of nodes) {
+        const properties = { ...node.data };
+        delete properties.icon_path;
+        const yamlData = yaml.dump(properties);
+        
+        const yamlFileHandle = await dirHandle.getFileHandle(`${node.id}.yaml`, { create: true });
+        const yamlWritable = await yamlFileHandle.createWritable();
+        await yamlWritable.write(yamlData);
+        await yamlWritable.close();
+      }
+
+      alert('Architecture saved successfully!');
     } catch (error) {
-      console.error('Error saving architecture:', error);
-      alert('Failed to save architecture.');
+      if ((error as DOMException).name !== 'AbortError') {
+        console.error('Error saving architecture:', error);
+        alert('Failed to save architecture.');
+      }
     }
   };
 
-    const handleLoad = async () => {
-    try {
-      const response = await axios.get('/api/atc/gcp/architectures');
-      setSavedArchitectures(response.data.architectures || []);
-      setIsLoadModalVisible(true);
-    } catch (error) {
-      console.error('Error fetching saved architectures:', error);
-      alert('Failed to fetch list of saved architectures.');
+  const handleLoad = async () => {
+    if (!('showDirectoryPicker' in window)) {
+      alert('Your browser does not support the File System Access API. Please use a modern browser like Chrome or Edge.');
+      return;
     }
-  };
 
-  const loadSelectedArchitecture = async (name: string) => {
     try {
-      const response = await axios.get(`/api/atc/gcp/architectures/${name}`);
-      const { nodes: loadedNodes, edges: loadedEdges } = response.data;
+      const dirHandle = await (window as any).showDirectoryPicker();
+      let diagramContent: any = null;
+      const yamlProperties: { [key: string]: any } = {};
 
-      // Enrich loaded nodes with icon_path from the components list
-      const enrichedNodes = loadedNodes.map((node: Node) => {
+      for await (const entry of dirHandle.values()) {
+        if (entry.kind === 'file') {
+          if (entry.name === 'diagram.json') {
+            const file = await entry.getFile();
+            diagramContent = JSON.parse(await file.text());
+          } else if (entry.name.endsWith('.yaml')) {
+            const file = await entry.getFile();
+            const nodeId = entry.name.replace('.yaml', '');
+            yamlProperties[nodeId] = yaml.load(await file.text());
+          }
+        }
+      }
+
+      if (!diagramContent) {
+        throw new Error('diagram.json not found in the selected directory.');
+      }
+
+      const { nodes: loadedNodes, edges: loadedEdges } = diagramContent;
+
+      // Validate and enrich nodes
+      const validatedNodes = [];
+      for (const node of loadedNodes) {
         const componentType = node.id.split('-')[0];
+        const defResponse = await axios.get(`/api/atc/${provider}/components/${componentType}`);
+        const componentDef = defResponse.data;
+        const validProperties = new Set(componentDef.properties.map((p: any) => p.name));
+
+        const loadedProperties = yamlProperties[node.id];
+        if (!loadedProperties) {
+          throw new Error(`Property file ${node.id}.yaml not found for node ${node.data.label}.`);
+        }
+
+        for (const propName in loadedProperties) {
+          if (propName === 'label') continue;
+          if (!validProperties.has(propName)) {
+            throw new Error(`Invalid property '${propName}' for component '${node.data.label}'.`);
+          }
+        }
+
         const component = components.find(c => c.type === componentType);
-        return {
+        validatedNodes.push({
           ...node,
           data: {
-            ...node.data,
-            icon_path: component ? component.icon_path : '', // Fallback to empty string
+            ...loadedProperties,
+            icon_path: component ? component.icon_path : '',
           },
-        };
-      });
+        });
+      }
 
-      setNodes(enrichedNodes || []);
+      setNodes(validatedNodes);
       setEdges(loadedEdges || []);
-      setIsLoadModalVisible(false);
-      alert(`Architecture '${name}' loaded successfully.`);
+      alert('Architecture loaded successfully!');
     } catch (error) {
-      console.error('Error loading architecture:', error);
-      alert('Failed to load architecture.');
+      if ((error as DOMException).name !== 'AbortError') {
+        console.error('Error loading architecture:', error);
+        alert(`Failed to load architecture: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   };
 
@@ -233,30 +284,6 @@ const AtcPage: React.FC = () => {
 
   return (
     <ReactFlowProvider>
-      <Modal
-        onDismiss={() => setIsLoadModalVisible(false)}
-        visible={isLoadModalVisible}
-        closeAriaLabel="Close modal"
-        header="Load Architecture"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setIsLoadModalVisible(false)}>Cancel</Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        {savedArchitectures.length > 0 ? (
-          <SpaceBetween direction="vertical" size="xs">
-            {savedArchitectures.map(archName => (
-              <Button key={archName} onClick={() => loadSelectedArchitecture(archName)}>{archName}</Button>
-            ))}
-          </SpaceBetween>
-        ) : (
-          <p>No saved architectures found.</p>
-        )}
-      </Modal>
-
       <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
         {/* Left Pane: Components */}
         <div style={{ width: '20%', padding: '10px', borderRight: '1px solid #ccc', overflowY: 'auto' }}>
