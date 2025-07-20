@@ -1,0 +1,29 @@
+{
+  "name": "Compute Engine VM",
+  "type": "gcp_compute_engine_vm",
+  "icon": "compute_engine_vm.svg",
+  "properties": [
+    {
+      "name": "Instance Name",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "Zone",
+      "type": "string",
+      "required": true,
+      "default": "us-central1-a"
+    },
+    {
+      "name": "Machine Type",
+      "type": "enum",
+      "options": ["e2-micro", "e2-small", "e2-medium"],
+      "default": "e2-micro"
+    },
+    {
+      "name": "Boot Disk Image",
+      "type": "string",
+      "default": "debian-cloud/debian-11"
+    }
+  ]
+}

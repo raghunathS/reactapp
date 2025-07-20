@@ -1,0 +1,30 @@
+{
+  "name": "Cloud Function",
+  "type": "gcp_cloud_function",
+  "icon": "cloud_function.svg",
+  "properties": [
+    {
+      "name": "Function Name",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "Region",
+      "type": "string",
+      "required": true,
+      "default": "us-central1"
+    },
+    {
+      "name": "Runtime",
+      "type": "enum",
+      "options": ["nodejs18", "python39", "go116"],
+      "default": "nodejs18"
+    },
+    {
+      "name": "Memory",
+      "type": "enum",
+      "options": ["128MB", "256MB", "512MB", "1024MB"],
+      "default": "256MB"
+    }
+  ]
+}

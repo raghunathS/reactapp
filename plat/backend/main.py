@@ -10,6 +10,9 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+from atc import router as atc_router
+
 app = FastAPI()
 
 tickets_df = None
@@ -130,6 +133,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+app.include_router(atc_router, prefix='/api/atc')
 
 @app.get("/api/tickets-filter-options")
 def get_ticket_filter_options():
@@ -267,6 +273,14 @@ def get_environment_summary(year: Optional[int] = None, environment: Optional[st
     logger.info(f"--- Starting /api/environment-summary (year: {year}) ---")
     try:
         df = get_data(year, environment, narrow_environment)
+
+        # If no data after filtering, return a default empty response structure
+        if df.empty:
+            logger.warning(f"No ticket data found for year {year} and other filters. Returning empty summary.")
+            empty_stats = CSPStatistics(total_tickets=0, monthly_average=0)
+            return EnvironmentSummaryResponse(
+                aws=[], gcp=[], aws_stats=empty_stats, gcp_stats=empty_stats
+            )
 
         df['tCreated'] = pd.to_datetime(df['tCreated'])
         df['Month'] = df['tCreated'].dt.to_period('M').astype(str)

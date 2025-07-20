@@ -1,0 +1,24 @@
+{
+  "name": "Cloud Storage",
+  "type": "gcp_cloud_storage",
+  "icon": "cloud_storage.svg",
+  "properties": [
+    {
+      "name": "Bucket Name",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "Location",
+      "type": "string",
+      "required": true,
+      "default": "US-CENTRAL1"
+    },
+    {
+      "name": "Storage Class",
+      "type": "enum",
+      "options": ["Standard", "Nearline", "Coldline", "Archive"],
+      "default": "Standard"
+    }
+  ]
+}
