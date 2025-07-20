@@ -3,83 +3,15 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 from fastapi import FastAPI, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import json
 import logging
+import atc
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-from atc import router as atc_router
-
-app = FastAPI()
-
-tickets_df = None
-aws_heartbeat_df = None
-gcp_heartbeat_df = None
-
-class CSPStatistics(BaseModel):
-    total_tickets: int
-    monthly_average: float
-
-class EnvironmentSummaryResponse(BaseModel):
-    aws: List[Dict[str, Any]]
-    gcp: List[Dict[str, Any]]
-    aws_stats: CSPStatistics
-    gcp_stats: CSPStatistics
-
-
-@app.on_event("startup")
-def startup_event():
-    """Load and combine AWS and GCP ticket datasets into memory when the application starts."""
-    global tickets_df
-    try:
-        aws_df = pd.read_csv('aws_ticket_data.csv')
-        gcp_df = pd.read_csv('gcp_ticket_data.csv')
-        tickets_df = pd.concat([aws_df, gcp_df], ignore_index=True)
-        
-        tickets_df['tCreated'] = pd.to_datetime(tickets_df['tCreated'])
-        tickets_df['tResolved'] = pd.to_datetime(tickets_df['tResolved'], errors='coerce')
-        tickets_df['Priority'] = tickets_df['Priority'].fillna('unknown')
-        print("AWS and GCP ticket data loaded and combined successfully.")
-    except FileNotFoundError as e:
-        print(f"Error: {e.filename} not found. Starting with an empty DataFrame.")
-        tickets_df = pd.DataFrame()
-    except Exception as e:
-        print(f"An error occurred during data loading: {e}")
-        tickets_df = pd.DataFrame()
-
-    global aws_heartbeat_df, gcp_heartbeat_df
-    try:
-        aws_heartbeat_df = pd.read_csv('aws_heartbeat_ticket_data.csv')
-        aws_heartbeat_df['tCreated'] = pd.to_datetime(aws_heartbeat_df['tCreated'])
-        gcp_heartbeat_df = pd.read_csv('gcp_heartbeat_ticket_data.csv')
-        gcp_heartbeat_df['tCreated'] = pd.to_datetime(gcp_heartbeat_df['tCreated'])
-        print("Heartbeat data loaded successfully.")
-    except FileNotFoundError as e:
-        print(f"Error: Heartbeat file {e.filename} not found. Heartbeat monitoring will be disabled.")
-        aws_heartbeat_df = pd.DataFrame()
-        gcp_heartbeat_df = pd.DataFrame()
-
-def get_data(year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None) -> pd.DataFrame:
-    """
-    Helper function to get a copy of the dataframe, filtered by year and environment if provided.
-    """
-    df = tickets_df.copy()
-    if year:
-        df = df[df['tCreated'].dt.year == year]
-
-    # Apply environment filters only if they are not 'All' or None
-    if environment and environment != 'All':
-        df = df[df['Environment'] == environment]
-    
-    if narrow_environment and narrow_environment != 'All':
-        df = df[df['NarrowEnvironment'] == narrow_environment]
-        
-    return df
-
-# Allow requests from the React frontend
 # Mock Confluence Data
 confluence_page_tree = [
     {
@@ -117,6 +49,76 @@ confluence_pages = {
     "22": "<h1>Development Setup</h1><p>Clone the repository and run npm install.</p><h2>Prerequisites</h2><p>You will need Node.js and Python.</p>",
 }
 
+app = FastAPI()
+
+# Include the ATC router to make its endpoints available
+app.include_router(atc.router, prefix="/api/atc", tags=["atc"])
+
+tickets_df = None
+aws_heartbeat_df = None
+gcp_heartbeat_df = None
+
+class CSPStatistics(BaseModel):
+    total_tickets: int
+    monthly_average: float
+
+class EnvironmentSummaryResponse(BaseModel):
+    aws: List[Dict[str, Any]]
+    gcp: List[Dict[str, Any]]
+    aws_stats: CSPStatistics
+    gcp_stats: CSPStatistics
+
+@app.on_event("startup")
+def startup_event():
+    """Load and combine AWS and GCP ticket datasets into memory when the application starts."""
+    global tickets_df
+    try:
+        aws_df = pd.read_csv('aws_ticket_data.csv')
+        gcp_df = pd.read_csv('gcp_ticket_data.csv')
+        tickets_df = pd.concat([aws_df, gcp_df], ignore_index=True)
+        
+        tickets_df['tCreated'] = pd.to_datetime(tickets_df['tCreated'])
+        tickets_df['tResolved'] = pd.to_datetime(tickets_df['tResolved'], errors='coerce')
+        tickets_df['Priority'] = tickets_df['Priority'].fillna('unknown')
+        print("AWS and GCP ticket data loaded and combined successfully.")
+    except FileNotFoundError as e:
+        print(f"Error: {e.filename} not found. Starting with an empty DataFrame.")
+        tickets_df = pd.DataFrame()
+    except Exception as e:
+        print(f"An error occurred during data loading: {e}")
+        tickets_df = pd.DataFrame()
+
+    global aws_heartbeat_df, gcp_heartbeat_df
+    try:
+        aws_heartbeat_df = pd.read_csv('aws_heartbeat_ticket_data.csv')
+        aws_heartbeat_df['tCreated'] = pd.to_datetime(aws_heartbeat_df['tCreated'])
+        gcp_heartbeat_df = pd.read_csv('gcp_heartbeat_ticket_data.csv')
+        gcp_heartbeat_df['tCreated'] = pd.to_datetime(gcp_heartbeat_df['tCreated'])
+        print("Heartbeat data loaded successfully.")
+    except FileNotFoundError as e:
+        print(f"Error: Heartbeat file {e.filename} not found. Heartbeat monitoring will be disabled.")
+        aws_heartbeat_df = pd.DataFrame()
+        gcp_heartbeat_df = pd.DataFrame()
+
+def get_data(year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None) -> pd.DataFrame:
+    """
+    Helper function to get a copy of the dataframe, filtered by year and environment if provided.
+    """
+    if tickets_df is None:
+        return pd.DataFrame()
+    df = tickets_df.copy()
+    if year:
+        df = df[df['tCreated'].dt.year == year]
+
+    # Apply environment filters only if they are not 'All' or None
+    if environment and environment != 'All':
+        df = df[df['Environment'] == environment]
+    
+    if narrow_environment and narrow_environment != 'All':
+        df = df[df['NarrowEnvironment'] == narrow_environment]
+        
+    return df
+
 @app.get("/api/confluence/page-tree")
 async def get_confluence_page_tree():
     return confluence_page_tree
@@ -124,7 +126,6 @@ async def get_confluence_page_tree():
 @app.get("/api/confluence/page/{page_id}")
 async def get_confluence_page(page_id: str):
     return {"html_content": confluence_pages.get(page_id, "<h1>Page Not Found</h1>")}
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -134,15 +135,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-app.include_router(atc_router, prefix='/api/atc')
-
 @app.get("/api/tickets-filter-options")
 def get_ticket_filter_options():
     """
     Provides the unique values for filterable ticket columns.
     """
     try:
+        if tickets_df is None or tickets_df.empty:
+            return {
+                "Priority": [], "CSP": [], "AppCode": [], 
+                "Environment": [], "NarrowEnvironment": []
+            }
         options = {
             "Priority": sorted([str(p) for p in tickets_df['Priority'].unique()]),
             "CSP": sorted([str(c) for c in tickets_df['CSP'].unique()]),
@@ -154,7 +157,6 @@ def get_ticket_filter_options():
     except Exception as e:
         logger.error(f"Error in /api/tickets-filter-options: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/api/tickets")
 def get_tickets(
@@ -225,12 +227,10 @@ def get_tickets(
         end_index = start_index + size
         paginated_df = df.iloc[start_index:end_index].copy()
 
-        # Convert datetime objects to ISO 8601 strings for JSON compatibility
         for col in ['tCreated', 'tResolved']:
             if col in paginated_df.columns:
                 paginated_df[col] = paginated_df[col].apply(lambda x: x.isoformat() if pd.notna(x) else None)
 
-        # Fill NaN values to prevent JSON errors
         paginated_df.fillna('', inplace=True)
 
         return {
@@ -244,9 +244,7 @@ def get_tickets(
 
 @app.get("/api/csp-vs-priority")
 async def get_csp_vs_priority():
-    # Group by CSP and Priority to get counts for a stacked bar chart
     csp_priority_counts = tickets_df.groupby(['CSP', 'Priority']).size().unstack(fill_value=0)
-    # Ensure all standard priorities are present
     for priority in ['Low', 'Medium', 'High', 'unknown']:
         if priority not in csp_priority_counts.columns:
             csp_priority_counts[priority] = 0
@@ -254,27 +252,19 @@ async def get_csp_vs_priority():
 
 @app.get("/api/appcode-vs-priority")
 async def get_appcode_vs_priority():
-    # Pivot table to get counts of AppCode vs Priority for a heatmap
     heatmap_data = tickets_df.groupby(['AppCode', 'Priority']).size().unstack(fill_value=0)
-    # Ensure all standard priorities are present in columns
     for priority in ['Low', 'Medium', 'High', 'unknown']:
         if priority not in heatmap_data.columns:
             heatmap_data[priority] = 0
-    # Order columns for consistency
     heatmap_data = heatmap_data[['Low', 'Medium', 'High', 'unknown']]
     return heatmap_data.reset_index().to_dict(orient='records')
 
 @app.get("/api/environment-summary", response_model=EnvironmentSummaryResponse)
 def get_environment_summary(year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
-    """
-    Endpoint to get ticket counts by month, stacked by Environment, for each CSP.
-    Returns a list of all environments found in the data.
-    """
     logger.info(f"--- Starting /api/environment-summary (year: {year}) ---")
     try:
         df = get_data(year, environment, narrow_environment)
 
-        # If no data after filtering, return a default empty response structure
         if df.empty:
             logger.warning(f"No ticket data found for year {year} and other filters. Returning empty summary.")
             empty_stats = CSPStatistics(total_tickets=0, monthly_average=0)
@@ -284,7 +274,6 @@ def get_environment_summary(year: Optional[int] = None, environment: Optional[st
 
         df['tCreated'] = pd.to_datetime(df['tCreated'])
         df['Month'] = df['tCreated'].dt.to_period('M').astype(str)
-        # Determine which column to stack the bar chart by
         if environment and environment != 'All':
             stack_by_column = 'NarrowEnvironment'
         else:
@@ -297,7 +286,6 @@ def get_environment_summary(year: Optional[int] = None, environment: Optional[st
 
         summary = df.groupby(['CSP', 'Month', stack_by_column]).size().unstack(fill_value=0)
 
-        # Ensure all stack value columns exist, even if they have no data for a particular month
         for value in all_stack_values:
             if value not in summary.columns:
                 summary[value] = 0
@@ -311,7 +299,6 @@ def get_environment_summary(year: Optional[int] = None, environment: Optional[st
         aws_total = int(df_aws.shape[0])
         gcp_total = int(df_gcp.shape[0])
 
-        # Check for division by zero if no tickets for the year
         aws_monthly_avg = round(aws_total / 12, 1) if aws_total > 0 else 0
         gcp_monthly_avg = round(gcp_total / 12, 1) if gcp_total > 0 else 0
 
@@ -340,25 +327,18 @@ async def get_ticket_count_by_appcode(year: int, csp: str, environment: Optional
     df_csp = df[df['CSP'] == csp].copy()
     df_csp['Month'] = pd.to_datetime(df_csp['tCreated']).dt.strftime('%b')
     
-    # Ensure all months are present
     months_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     
-    # Group by Month and AppCode and count tickets
     grouped = df_csp.groupby(['Month', 'AppCode']).size().reset_index(name='count')
     
-    # Pivot the table to get AppCodes as columns
     pivot_df = grouped.pivot(index='Month', columns='AppCode', values='count').fillna(0).astype(int)
     
-    # Ensure all months are in the index
     pivot_df = pivot_df.reindex(months_order, fill_value=0)
     
-    # Get the list of all AppCodes
     app_codes = sorted(df_csp['AppCode'].unique().tolist())
     
-    # Ensure all app_codes are in the columns
     pivot_df = pivot_df.reindex(columns=app_codes, fill_value=0)
     
-    # Convert to list of dicts
     chart_data = pivot_df.reset_index().to_dict(orient='records')
     
     return {
@@ -366,21 +346,17 @@ async def get_ticket_count_by_appcode(year: int, csp: str, environment: Optional
         "app_codes": app_codes
     }
 
-
 @app.get("/api/reports/control-count-by-appcode")
 async def get_control_count_by_appcode(year: int, csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
     df = get_data(year, environment, narrow_environment)
     df_csp = df[df['CSP'] == csp]
     
-    # Group by AppCode and ConfigRule
     grouped = df_csp.groupby(['AppCode', 'ConfigRule']).size().reset_index(name='count')
     
-    # Pivot to get ConfigRules as columns
     pivot_df = grouped.pivot(index='AppCode', columns='ConfigRule', values='count').fillna(0).astype(int)
     
     config_rules = sorted(df_csp['ConfigRule'].unique().tolist())
     
-    # Ensure all config rules are present in columns
     pivot_df = pivot_df.reindex(columns=config_rules, fill_value=0)
 
     chart_data = pivot_df.reset_index().to_dict(orient='records')
@@ -390,19 +366,16 @@ async def get_control_count_by_appcode(year: int, csp: str, environment: Optiona
         "config_rules": config_rules
     }
 
-
 @app.get("/api/reports/heatmap")
 async def get_heatmap_data(year: int, csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
     df = get_data(year, environment, narrow_environment)
     df_csp = df[df['CSP'] == csp]
     
-    # Create a pivot table for the heatmap
     heatmap_df = pd.crosstab(df_csp['AppCode'], df_csp['ConfigRule'])
     
     app_codes = sorted(heatmap_df.index.tolist())
     config_rules = sorted(heatmap_df.columns.tolist())
     
-    # Convert to a list of lists for the heatmap data
     heatmap_data = heatmap_df.values.tolist()
     
     return {
@@ -410,6 +383,58 @@ async def get_heatmap_data(year: int, csp: str, environment: Optional[str] = Non
         "app_codes": app_codes,
         "config_rules": config_rules
     }
+
+@app.get("/api/configrule-heartbeat")
+async def get_configrule_heartbeat(csp: str, year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
+    logger.info(f"--- Starting /api/configrule-heartbeat (csp: {csp}, year: {year}) ---")
+    try:
+        # Select the correct heartbeat dataframe based on the CSP
+        if csp.lower() == 'aws':
+            df = aws_heartbeat_df.copy()
+        elif csp.lower() == 'gcp':
+            df = gcp_heartbeat_df.copy()
+        else:
+            return JSONResponse(status_code=400, content={"detail": "Invalid CSP specified."})
+
+        if df.empty:
+            logger.warning(f"Heartbeat data for {csp} is empty.")
+            return {}
+
+        # Apply filters
+        if year:
+            df = df[df['tCreated'].dt.year == year]
+        if environment and environment != 'All':
+            df = df[df['Environment'] == environment]
+        if narrow_environment and narrow_environment != 'All':
+            df = df[df['NarrowEnvironment'] == narrow_environment]
+
+        if df.empty:
+            logger.warning(f"No heartbeat data for {csp} after filtering.")
+            return {}
+
+        df['Month'] = df['tCreated'].dt.to_period('M').astype(str)
+
+        summary = df.groupby(['ConfigRule', 'Month']).size().reset_index(name='count')
+        
+        pivot_df = summary.pivot_table(index='Month', columns='ConfigRule', values='count').fillna(0)
+
+        if year:
+            all_months_in_year = pd.period_range(start=f'{year}-01', end=f'{year}-12', freq='M').strftime('%Y-%m')
+            pivot_df = pivot_df.reindex(all_months_in_year, fill_value=0)
+
+        pivot_df.sort_index(inplace=True)
+
+        result = {}
+        for rule in pivot_df.columns:
+            rule_data = pivot_df[[rule]].reset_index()
+            rule_data.columns = ['month', 'count']
+            result[rule] = rule_data.to_dict('records')
+
+        return result
+    except Exception as e:
+        logger.error(f"Error in configrule heartbeat for {csp}: {e}", exc_info=True)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"detail": "Failed to determine status."})
 
 @app.post("/api/chatbot")
 def chatbot_response(request: dict):

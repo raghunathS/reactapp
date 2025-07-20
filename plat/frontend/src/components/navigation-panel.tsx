@@ -17,9 +17,12 @@ export default function NavigationPanel() {
   const [items] = useState<SideNavigationProps.Item[]>(() => {
     const items: SideNavigationProps.Item[] = [
       {
-        type: "link",
+        type: "section",
         text: "Dashboard",
-        href: "/",
+        items: [
+          { type: "link", text: "Overview", href: "/" },
+          { type: "link", text: "Heartbeat", href: "/heartbeat" },
+        ],
       },
       {
         type: "section",

@@ -14,6 +14,7 @@ import AddItemPage from "./pages/aws/add-item/add-item-page";
 import Item1Page from "./pages/gcp/secops-reports-page";
 import ChatbotPage from './pages/agents/chatbot-page';
 import ConfluencePage from './pages/whitepapers/confluence-page';
+import HeartbeatPage from './pages/Heartbeat';
 
 import AtcPage from './pages/atc/atc-page';
 import NotFound from "./pages/not-found";
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/gcp/secops-reports" element={<Item1Page />} />
             <Route path="/agents/:agentName" element={<ChatbotPage />} />
             <Route path="/whitepapers/confluence" element={<ConfluencePage />} />
+            <Route path="/heartbeat" element={<HeartbeatPage />} />
             <Route path="/atc/:provider" element={<AtcPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
