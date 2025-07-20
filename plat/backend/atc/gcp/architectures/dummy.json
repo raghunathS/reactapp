@@ -1,0 +1,55 @@
+{
+  "nodes": [
+    {
+      "id": "gcp_compute_engine_vm-1752905097760",
+      "type": "custom",
+      "position": {
+        "x": 229.45745,
+        "y": 281.5888
+      },
+      "data": {
+        "label": "Compute Engine VM",
+        "icon_path": "/api/atc/gcp/icons/compute_engine_vm.svg",
+        "Instance Name": "instance1"
+      },
+      "width": 150,
+      "height": 104,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 229.45745,
+        "y": 281.5888
+      },
+      "dragging": false
+    },
+    {
+      "id": "gcp_cloud_storage-1752905109003",
+      "type": "custom",
+      "position": {
+        "x": 686.1934500000002,
+        "y": -7.617599999999911
+      },
+      "data": {
+        "label": "Cloud Storage",
+        "icon_path": "/api/atc/gcp/icons/cloud_storage.svg",
+        "Bucket Name": "bucket1"
+      },
+      "width": 150,
+      "height": 85,
+      "selected": true,
+      "positionAbsolute": {
+        "x": 686.1934500000002,
+        "y": -7.617599999999911
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "gcp_cloud_storage-1752905109003",
+      "sourceHandle": null,
+      "target": "gcp_compute_engine_vm-1752905097760",
+      "targetHandle": null,
+      "id": "reactflow__edge-gcp_cloud_storage-1752905109003-gcp_compute_engine_vm-1752905097760"
+    }
+  ]
+}

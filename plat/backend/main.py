@@ -10,9 +10,14 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+from atc import router as atc_router
+
 app = FastAPI()
 
 tickets_df = None
+aws_heartbeat_df = None
+gcp_heartbeat_df = None
 
 class CSPStatistics(BaseModel):
     total_tickets: int
@@ -27,29 +32,51 @@ class EnvironmentSummaryResponse(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    """Load the dataset into memory when the application starts."""
+    """Load and combine AWS and GCP ticket datasets into memory when the application starts."""
     global tickets_df
     try:
-        tickets_df = pd.read_csv('ticket_data.csv')
+        aws_df = pd.read_csv('aws_ticket_data.csv')
+        gcp_df = pd.read_csv('gcp_ticket_data.csv')
+        tickets_df = pd.concat([aws_df, gcp_df], ignore_index=True)
+        
         tickets_df['tCreated'] = pd.to_datetime(tickets_df['tCreated'])
         tickets_df['tResolved'] = pd.to_datetime(tickets_df['tResolved'], errors='coerce')
         tickets_df['Priority'] = tickets_df['Priority'].fillna('unknown')
-        print("Ticket data loaded successfully.")
-    except FileNotFoundError:
-        print("Error: ticket_data.csv not found. Starting with an empty DataFrame.")
+        print("AWS and GCP ticket data loaded and combined successfully.")
+    except FileNotFoundError as e:
+        print(f"Error: {e.filename} not found. Starting with an empty DataFrame.")
         tickets_df = pd.DataFrame()
+    except Exception as e:
+        print(f"An error occurred during data loading: {e}")
+        tickets_df = pd.DataFrame()
+
+    global aws_heartbeat_df, gcp_heartbeat_df
+    try:
+        aws_heartbeat_df = pd.read_csv('aws_heartbeat_ticket_data.csv')
+        aws_heartbeat_df['tCreated'] = pd.to_datetime(aws_heartbeat_df['tCreated'])
+        gcp_heartbeat_df = pd.read_csv('gcp_heartbeat_ticket_data.csv')
+        gcp_heartbeat_df['tCreated'] = pd.to_datetime(gcp_heartbeat_df['tCreated'])
+        print("Heartbeat data loaded successfully.")
+    except FileNotFoundError as e:
+        print(f"Error: Heartbeat file {e.filename} not found. Heartbeat monitoring will be disabled.")
+        aws_heartbeat_df = pd.DataFrame()
+        gcp_heartbeat_df = pd.DataFrame()
 
 def get_data(year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None) -> pd.DataFrame:
     """
-    Helper function to get a copy of the dataframe, filtered by year if provided.
+    Helper function to get a copy of the dataframe, filtered by year and environment if provided.
     """
     df = tickets_df.copy()
     if year:
         df = df[df['tCreated'].dt.year == year]
+
+    # Apply environment filters only if they are not 'All' or None
     if environment and environment != 'All':
         df = df[df['Environment'] == environment]
+    
     if narrow_environment and narrow_environment != 'All':
         df = df[df['NarrowEnvironment'] == narrow_environment]
+        
     return df
 
 # Allow requests from the React frontend
@@ -107,6 +134,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+app.include_router(atc_router, prefix='/api/atc')
+
 @app.get("/api/tickets-filter-options")
 def get_ticket_filter_options():
     """
@@ -142,8 +172,8 @@ def get_tickets(
     Priority: Optional[str] = None,
     CSP: Optional[str] = None,
     AppCode: Optional[str] = None,
-    Environment: Optional[str] = None,
-    NarrowEnvironment: Optional[str] = None,
+    column_environment: Optional[str] = None, # Renamed to avoid conflict with global filter
+    column_narrow_environment: Optional[str] = None, # Renamed to avoid conflict with global filter
     AlertType: Optional[str] = None,
     ConfigRule: Optional[str] = None,
     Account: Optional[str] = None
@@ -165,10 +195,10 @@ def get_tickets(
             df = df[df['CSP'].str.contains(CSP, case=False, na=False)]
         if AppCode:
             df = df[df['AppCode'].str.contains(AppCode, case=False, na=False)]
-        if Environment: # This is the per-column filter
-            df = df[df['Environment'].str.contains(Environment, case=False, na=False)]
-        if NarrowEnvironment: # This is the per-column filter
-            df = df[df['NarrowEnvironment'].str.contains(NarrowEnvironment, case=False, na=False)]
+        if column_environment: # This is the per-column filter
+            df = df[df['Environment'].str.contains(column_environment, case=False, na=False)]
+        if column_narrow_environment: # This is the per-column filter
+            df = df[df['NarrowEnvironment'].str.contains(column_narrow_environment, case=False, na=False)]
         if AlertType:
             df = df[df['AlertType'].str.contains(AlertType, case=False, na=False)]
         if ConfigRule:
@@ -176,28 +206,37 @@ def get_tickets(
         if Account:
             df = df[df['Account'].str.contains(Account, case=False, na=False)]
 
+        # 3. Sorting
+        if sort_by and sort_order:
+            ascending = sort_order == 'asc'
+            if sort_by == 'Key':
+                # Use a numeric sort for the 'Key' column
+                df['sort_key'] = df['Key'].str.extract('(\\d+)').astype(int)
+                df = df.sort_values(by='sort_key', ascending=ascending).drop(columns=['sort_key'])
+            elif sort_by in df.columns:
+                df = df.sort_values(by=sort_by, ascending=ascending)
+
+        # 4. Get total count *after* all filtering and sorting
         total_count = len(df)
 
-        # Sorting
-        if sort_by in df.columns:
-            df = df.sort_values(by=sort_by, ascending=(sort_order == 'asc'))
-
-        # Pagination
+        # 5. Pagination
+        total_pages = (total_count + size - 1) // size
         start_index = (page - 1) * size
         end_index = start_index + size
-        paginated_data = df.iloc[start_index:end_index].copy()
+        paginated_df = df.iloc[start_index:end_index].copy()
 
         # Convert datetime objects to ISO 8601 strings for JSON compatibility
         for col in ['tCreated', 'tResolved']:
-            if col in paginated_data.columns:
-                paginated_data[col] = paginated_data[col].apply(lambda x: x.isoformat() if pd.notna(x) else None)
+            if col in paginated_df.columns:
+                paginated_df[col] = paginated_df[col].apply(lambda x: x.isoformat() if pd.notna(x) else None)
 
         # Fill NaN values to prevent JSON errors
-        paginated_data.fillna('', inplace=True)
+        paginated_df.fillna('', inplace=True)
 
         return {
-            "tickets": paginated_data.to_dict(orient='records'),
-            "total_count": total_count
+            "tickets": paginated_df.to_dict(orient='records'),
+            "total_count": total_count,
+            "total_pages": total_pages
         }
     except Exception as e:
         logger.error(f"Error in /api/tickets: {e}", exc_info=True)
@@ -235,19 +274,33 @@ def get_environment_summary(year: Optional[int] = None, environment: Optional[st
     try:
         df = get_data(year, environment, narrow_environment)
 
+        # If no data after filtering, return a default empty response structure
+        if df.empty:
+            logger.warning(f"No ticket data found for year {year} and other filters. Returning empty summary.")
+            empty_stats = CSPStatistics(total_tickets=0, monthly_average=0)
+            return EnvironmentSummaryResponse(
+                aws=[], gcp=[], aws_stats=empty_stats, gcp_stats=empty_stats
+            )
+
         df['tCreated'] = pd.to_datetime(df['tCreated'])
         df['Month'] = df['tCreated'].dt.to_period('M').astype(str)
-        df['Environment'] = df['Environment'].fillna('Unknown')
+        # Determine which column to stack the bar chart by
+        if environment and environment != 'All':
+            stack_by_column = 'NarrowEnvironment'
+        else:
+            stack_by_column = 'Environment'
+
+        df[stack_by_column] = df[stack_by_column].fillna('Unknown')
         
-        all_environments = sorted(df['Environment'].unique().tolist())
-        logger.info(f"Found unique environments: {all_environments}")
+        all_stack_values = sorted(df[stack_by_column].unique().tolist())
+        logger.info(f"Stacking by '{stack_by_column}'. Found unique values: {all_stack_values}")
 
-        summary = df.groupby(['CSP', 'Month', 'Environment']).size().unstack(fill_value=0)
+        summary = df.groupby(['CSP', 'Month', stack_by_column]).size().unstack(fill_value=0)
 
-        # Ensure all environment columns exist, even if they have no data for a particular month
-        for env in all_environments:
-            if env not in summary.columns:
-                summary[env] = 0
+        # Ensure all stack value columns exist, even if they have no data for a particular month
+        for value in all_stack_values:
+            if value not in summary.columns:
+                summary[value] = 0
         
         summary = summary.reset_index()
         logger.info(f"Summary table head:\n{summary.head()}")
@@ -375,6 +428,43 @@ def chatbot_response(request: dict):
         })
 
     return {"responses": responses}
+
+@app.get("/api/heartbeat-status")
+def get_heartbeat_status(csp: str, year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
+    """Endpoint to get heartbeat ticket status for line graphs."""
+    if csp.lower() == 'aws':
+        df = aws_heartbeat_df.copy()
+    elif csp.lower() == 'gcp':
+        df = gcp_heartbeat_df.copy()
+    else:
+        return {"error": "Invalid CSP specified"}
+
+    if df.empty:
+        return {"dates": [], "success": [], "failed": []}
+
+    # Note: Heartbeat data is not affected by environment filters, but we keep the params for consistency
+    if year:
+        df = df[df['tCreated'].dt.year == year]
+
+    df['Date'] = df['tCreated'].dt.date
+    # Derive status from the Summary field
+    df['Status'] = df['Summary'].apply(lambda x: 'Success' if 'Success' in str(x) else 'Failed')
+    status_counts = df.groupby(['Date', 'Status']).size().unstack(fill_value=0)
+    
+    if 'Success' not in status_counts:
+        status_counts['Success'] = 0
+    if 'Failed' not in status_counts:
+        status_counts['Failed'] = 0
+
+    status_counts = status_counts.reset_index()
+    status_counts['Date'] = pd.to_datetime(status_counts['Date']).dt.strftime('%Y-%m-%d')
+
+    return {
+        "dates": status_counts['Date'].tolist(),
+        "success": status_counts['Success'].tolist(),
+        "failed": status_counts['Failed'].tolist(),
+    }
+
 
 @app.get("/api/tickets/download")
 def download_tickets_csv(

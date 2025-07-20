@@ -14,6 +14,7 @@ import AddItemPage from "./pages/aws/add-item/add-item-page";
 import Item1Page from "./pages/gcp/secops-reports-page";
 import ChatbotPage from './pages/agents/chatbot-page';
 import ConfluencePage from './pages/whitepapers/confluence-page';
+
 import AtcPage from './pages/atc/atc-page';
 import NotFound from "./pages/not-found";
 import "./styles/app.scss";
