@@ -8,93 +8,75 @@ from fastapi.responses import FileResponse
 router = APIRouter()
 
 # Define paths relative to the current file's location
-ATC_DIR = os.path.dirname(__file__)
-COMPONENTS_DIR = os.path.join(ATC_DIR, 'atc', 'gcp', 'components')
-ICONS_DIR = os.path.join(ATC_DIR, 'atc', 'gcp', 'icons')
-ARCHITECTURES_DIR = os.path.join(ATC_DIR, 'atc', 'gcp', 'architectures')
-
-# Ensure the architectures directory exists
-os.makedirs(ARCHITECTURES_DIR, exist_ok=True)
+BACKEND_DIR = os.path.dirname(__file__)
+ATC_DIR = os.path.join(BACKEND_DIR, 'atc')
 
 class Architecture(BaseModel):
     nodes: List[Dict[str, Any]]
     edges: List[Dict[str, Any]]
 
-@router.get("/gcp/components")
-async def list_gcp_components():
+@router.get("/{provider}/components")
+async def list_components(provider: str):
+    components_dir = os.path.join(ATC_DIR, provider, 'components')
+    if not os.path.isdir(components_dir):
+        raise HTTPException(status_code=404, detail=f"Provider '{provider}' not found.")
+
     components = []
-    for filename in os.listdir(COMPONENTS_DIR):
+    for filename in os.listdir(components_dir):
         if filename.endswith(".json"):
-            filepath = os.path.join(COMPONENTS_DIR, filename)
+            filepath = os.path.join(components_dir, filename)
             with open(filepath, 'r') as f:
                 data = json.load(f)
                 components.append({
                     "name": data.get("name"),
                     "type": data.get("type"),
-                    "icon_path": f"/api/atc/gcp/icons/{data.get('icon')}"
+                    "icon_path": f"/api/atc/{provider}/icons/{data.get('icon')}"
                 })
     return components
 
-@router.get("/gcp/components/{component_type}")
-async def get_gcp_component_details(component_type: str):
+@router.get("/{provider}/components/{component_type}")
+async def get_component_details(provider: str, component_type: str):
+    components_dir = os.path.join(ATC_DIR, provider, 'components')
     # Component types from the frontend will be like 'gcp_cloud_storage'.
     # The JSON files are named 'cloud_storage.json'.
     # We need to strip the prefix to find the file.
-    if component_type.startswith('gcp_'):
-        filename = f"{component_type[4:]}.json"
+    prefix = f"{provider}_"
+    if component_type.startswith(prefix):
+        filename = f"{component_type[len(prefix):]}.json"
     else:
         filename = f"{component_type}.json"
 
-    filepath = os.path.join(COMPONENTS_DIR, filename)
+    filepath = os.path.join(components_dir, filename)
 
     if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail=f"Component '{component_type}' not found.")
+        raise HTTPException(status_code=404, detail="Component not found")
 
     with open(filepath, 'r') as f:
-        data = json.load(f)
-    return data
+        return json.load(f)
 
-@router.get("/gcp/icons/{icon_name}")
-async def get_gcp_icon(icon_name: str):
-    filepath = os.path.join(ICONS_DIR, icon_name)
+@router.get("/{provider}/icons/{icon_name}")
+async def get_icon(provider: str, icon_name: str):
+    icons_dir = os.path.join(ATC_DIR, provider, 'icons')
+    filepath = os.path.join(icons_dir, icon_name)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Icon not found")
     return FileResponse(filepath)
 
+@router.post("/{provider}/architectures")
+async def save_architecture(provider: str, architecture: Architecture):
+    architectures_dir = os.path.join(ATC_DIR, provider, 'architectures')
+    os.makedirs(architectures_dir, exist_ok=True)
+    filepath = os.path.join(architectures_dir, 'current_architecture.json')
+    with open(filepath, 'w') as f:
+        json.dump(architecture.dict(), f, indent=2)
+    return {"status": "success", "message": "Architecture saved"}
 
-@router.post("/gcp/architectures/{architecture_name}")
-async def save_architecture(architecture_name: str, architecture: Architecture):
-    """Saves an architecture design to a JSON file."""
-    if not architecture_name.isalnum():
-        raise HTTPException(status_code=400, detail="Architecture name must be alphanumeric.")
-    
-    filepath = os.path.join(ARCHITECTURES_DIR, f"{architecture_name}.json")
-    try:
-        with open(filepath, 'w') as f:
-            json.dump(architecture.dict(), f, indent=2)
-        return {"message": f"Architecture '{architecture_name}' saved successfully."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save architecture: {e}")
-
-@router.get("/gcp/architectures")
-async def list_saved_architectures():
-    """Lists all saved architecture files."""
-    try:
-        files = [f.replace('.json', '') for f in os.listdir(ARCHITECTURES_DIR) if f.endswith('.json')]
-        return {"architectures": files}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list architectures: {e}")
-
-@router.get("/gcp/architectures/{architecture_name}")
-async def load_architecture(architecture_name: str):
-    """Loads a specific architecture design from a JSON file."""
-    filepath = os.path.join(ARCHITECTURES_DIR, f"{architecture_name}.json")
+@router.get("/{provider}/architectures/current")
+async def load_architecture(provider: str):
+    architectures_dir = os.path.join(ATC_DIR, provider, 'architectures')
+    filepath = os.path.join(architectures_dir, 'current_architecture.json')
     if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="Architecture not found.")
+        return {"nodes": [], "edges": []} # Return empty if no architecture saved
     
-    try:
-        with open(filepath, 'r') as f:
-            data = json.load(f)
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load architecture: {e}")
+    with open(filepath, 'r') as f:
+        return json.load(f)

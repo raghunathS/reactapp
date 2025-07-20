@@ -1,0 +1,19 @@
+{
+  "name": "S3 Bucket",
+  "type": "aws_s3_bucket",
+  "icon": "s3.svg",
+  "properties": [
+    {
+      "name": "BucketName",
+      "type": "string",
+      "required": true,
+      "description": "The name of the S3 bucket."
+    },
+    {
+      "name": "Versioning",
+      "type": "boolean",
+      "default": false,
+      "description": "Enable versioning for the objects in the bucket."
+    }
+  ]
+}
