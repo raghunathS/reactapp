@@ -299,8 +299,16 @@ def get_environment_summary(year: Optional[int] = None, environment: Optional[st
         aws_total = int(df_aws.shape[0])
         gcp_total = int(df_gcp.shape[0])
 
-        aws_monthly_avg = round(aws_total / 12, 1) if aws_total > 0 else 0
-        gcp_monthly_avg = round(gcp_total / 12, 1) if gcp_total > 0 else 0
+        current_year = 2025
+        current_month = 7 
+
+        if year == current_year:
+            divisor = current_month
+        else:
+            divisor = 12
+
+        aws_monthly_avg = round(aws_total / divisor, 1) if aws_total > 0 else 0
+        gcp_monthly_avg = round(gcp_total / divisor, 1) if gcp_total > 0 else 0
 
         aws_stats = CSPStatistics(total_tickets=aws_total, monthly_average=aws_monthly_avg)
         gcp_stats = CSPStatistics(total_tickets=gcp_total, monthly_average=gcp_monthly_avg)
@@ -346,6 +354,19 @@ async def get_ticket_count_by_appcode(year: int, csp: str, environment: Optional
         "app_codes": app_codes
     }
 
+@app.get("/api/reports/total-ticket-count-by-appcode")
+def get_total_ticket_count_by_appcode(year: int, csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
+    df_full = get_data(year, environment, narrow_environment)
+    df_filtered = df_full[df_full['CSP'] == csp]
+
+    if df_filtered.empty:
+        return {}
+
+    # Group by AppCode and count tickets
+    total_counts = df_filtered.groupby('AppCode').size()
+
+    return total_counts.to_dict()
+
 @app.get("/api/reports/control-count-by-appcode")
 async def get_control_count_by_appcode(year: int, csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
     df = get_data(year, environment, narrow_environment)
@@ -357,8 +378,9 @@ async def get_control_count_by_appcode(year: int, csp: str, environment: Optiona
     
     config_rules = sorted(df_csp['ConfigRule'].unique().tolist())
     
+    # Ensure all config rules are present in the columns
     pivot_df = pivot_df.reindex(columns=config_rules, fill_value=0)
-
+    
     chart_data = pivot_df.reset_index().to_dict(orient='records')
     
     return {
@@ -385,10 +407,9 @@ async def get_heatmap_data(year: int, csp: str, environment: Optional[str] = Non
     }
 
 @app.get("/api/configrule-heartbeat")
-async def get_configrule_heartbeat(csp: str, year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
-    logger.info(f"--- Starting /api/configrule-heartbeat (csp: {csp}, year: {year}) ---")
+async def get_configrule_heartbeat(csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None):
+    logger.info(f"--- Starting /api/configrule-heartbeat (csp: {csp}) ---")
     try:
-        # Select the correct heartbeat dataframe based on the CSP
         if csp.lower() == 'aws':
             df = aws_heartbeat_df.copy()
         elif csp.lower() == 'gcp':
@@ -400,9 +421,23 @@ async def get_configrule_heartbeat(csp: str, year: Optional[int] = None, environ
             logger.warning(f"Heartbeat data for {csp} is empty.")
             return {}
 
-        # Apply filters
-        if year:
-            df = df[df['tCreated'].dt.year == year]
+        df['tCreated'] = pd.to_datetime(df['tCreated'])
+
+        # Date filtering logic
+        if start_date and end_date:
+            try:
+                start = pd.to_datetime(start_date)
+                end = pd.to_datetime(end_date)
+                df = df[(df['tCreated'] >= start) & (df['tCreated'] <= end)]
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Invalid date format."})
+        else:
+            # Default to last 7 days
+            end = pd.to_datetime('today')
+            start = end - pd.Timedelta(days=7)
+            df = df[(df['tCreated'] >= start) & (df['tCreated'] <= end)]
+
+        # Environment filters
         if environment and environment != 'All':
             df = df[df['Environment'] == environment]
         if narrow_environment and narrow_environment != 'All':
@@ -412,22 +447,29 @@ async def get_configrule_heartbeat(csp: str, year: Optional[int] = None, environ
             logger.warning(f"No heartbeat data for {csp} after filtering.")
             return {}
 
-        df['Month'] = df['tCreated'].dt.to_period('M').astype(str)
+        df['Date'] = df['tCreated'].dt.strftime('%Y-%m-%d')
 
-        summary = df.groupby(['ConfigRule', 'Month']).size().reset_index(name='count')
-        
-        pivot_df = summary.pivot_table(index='Month', columns='ConfigRule', values='count').fillna(0)
+        summary = df.groupby(['ConfigRule', 'Date']).size().reset_index(name='count')
+        pivot_df = summary.pivot_table(index='Date', columns='ConfigRule', values='count').fillna(0)
 
-        if year:
-            all_months_in_year = pd.period_range(start=f'{year}-01', end=f'{year}-12', freq='M').strftime('%Y-%m')
-            pivot_df = pivot_df.reindex(all_months_in_year, fill_value=0)
+        # Determine the date range from the request or default
+        if start_date and end_date:
+            request_start_date = pd.to_datetime(start_date)
+            request_end_date = pd.to_datetime(end_date)
+        else:
+            request_end_date = pd.to_datetime('today')
+            request_start_date = request_end_date - pd.Timedelta(days=7)
+
+        # Ensure all days in the requested range are present in the pivot table
+        all_days_in_range = pd.date_range(start=request_start_date, end=request_end_date, freq='D').strftime('%Y-%m-%d')
+        pivot_df = pivot_df.reindex(all_days_in_range, fill_value=0)
 
         pivot_df.sort_index(inplace=True)
 
         result = {}
         for rule in pivot_df.columns:
             rule_data = pivot_df[[rule]].reset_index()
-            rule_data.columns = ['month', 'count']
+            rule_data.columns = ['month', 'count'] # Keep 'month' for frontend compatibility
             result[rule] = rule_data.to_dict('records')
 
         return result
