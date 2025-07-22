@@ -96,9 +96,16 @@ const HeatmapWidget = ({ csp }: HeatmapWidgetProps) => {
 
   const getColorScaleRanges = () => {
     if (maxValue <= minValue) {
+      // This handles two cases:
+      // 1. No positive data (maxValue=0, minValue=0)
+      // 2. All positive data points have the same value (e.g., maxValue=5, minValue=5)
+      if (maxValue === 0 && minValue === 0) {
+        return [{ from: 0, to: 0, color: '#E5E7EB', name: 'zero' }];
+      }
+      // If all values are the same and non-zero, define color for 0 and that value.
       return [
-        { from: 0, to: 0, color: '#E5E7EB' }, // Gray for zero
-        { from: minValue, to: maxValue, color: '#60A5FA' } // Single blue color if no range
+        { from: 0, to: 0, color: '#E5E7EB', name: 'zero' },
+        { from: minValue, to: maxValue, color: '#60A5FA', name: 'single-value' }
       ];
     }
 

@@ -7,13 +7,14 @@ import {
   Box,
   Spinner,
   BreadcrumbGroup,
+  DatePicker,
+  SpaceBetween,
 } from '@cloudscape-design/components';
-import { useGlobalFilters } from '../../common/contexts/GlobalFilterContext';
 import HeartbeatGraph from './HeartbeatGraph.tsx';
 import BaseAppLayout from '../../components/base-app-layout';
 
 interface HeartbeatData {
-  month: string;
+  month: string; // Corresponds to 'Date' from backend, kept as 'month' for HeartbeatGraph compatibility
   count: number;
 }
 
@@ -21,19 +22,29 @@ interface HeartbeatApiResponse {
   [key: string]: HeartbeatData[];
 }
 
+// Helper to format a Date object to a 'YYYY-MM-DD' string
+const formatDate = (date: Date): string => {
+  return date.toISOString().split('T')[0];
+};
+
 const HeartbeatPage = () => {
-  const { selectedYear: year } = useGlobalFilters();
   const [activeTabId, setActiveTabId] = useState('aws');
   const [loading, setLoading] = useState(true);
   const [heartbeatData, setHeartbeatData] = useState<HeartbeatApiResponse>({});
 
+  // State for date range, defaulting to the last 7 days
+  const [endDate, setEndDate] = useState(formatDate(new Date()));
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(new Date().getDate() - 7);
+  const [startDate, setStartDate] = useState(formatDate(sevenDaysAgo));
+
   useEffect(() => {
-    if (!year) return;
+    if (!startDate || !endDate) return;
 
     const fetchData = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/configrule-heartbeat?csp=${activeTabId}&year=${year}`);
+        const response = await fetch(`/api/configrule-heartbeat?csp=${activeTabId}&start_date=${startDate}&end_date=${endDate}`);
         if (!response.ok) {
           throw new Error('Network response was not ok');
         }
@@ -48,7 +59,7 @@ const HeartbeatPage = () => {
     };
 
     fetchData();
-  }, [activeTabId, year]);
+  }, [activeTabId, startDate, endDate]);
 
   const renderGraphs = () => {
     if (loading) {
@@ -79,13 +90,35 @@ const HeartbeatPage = () => {
       breadcrumbs={
         <BreadcrumbGroup
           items={[
-            { text: "Dashboard", href: "/" },
-            { text: "Heartbeat", href: "/heartbeat" },
+            { text: 'Dashboard', href: '/' },
+            { text: 'Heartbeat', href: '/heartbeat' },
           ]}
         />
       }
       content={
-        <ContentLayout header={<Header variant="h1">ConfigRule Heartbeat</Header>}>
+        <ContentLayout
+          header={
+            <Header
+              variant="h1"
+              actions={
+                <SpaceBetween direction="horizontal" size="m">
+                  <DatePicker
+                    onChange={({ detail }) => setStartDate(detail.value)}
+                    value={startDate}
+                    placeholder="YYYY/MM/DD"
+                  />
+                  <DatePicker
+                    onChange={({ detail }) => setEndDate(detail.value)}
+                    value={endDate}
+                    placeholder="YYYY/MM/DD"
+                  />
+                </SpaceBetween>
+              }
+            >
+              ConfigRule Heartbeat
+            </Header>
+          }
+        >
           <Tabs
             activeTabId={activeTabId}
             onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
