@@ -222,7 +222,11 @@ export default function TicketsTable() {
     try {
       const columnFilters = Object.entries(filters)
         .filter(([, value]) => value)
-        .map(([key, value]) => `${key}:${value}`)
+        .map(([key, value]) => {
+          // This logic MUST match the parameter renaming in the useEffect hook
+          const filterKey = key === 'Environment' ? 'column_environment' : key === 'NarrowEnvironment' ? 'column_narrow_environment' : key;
+          return `${filterKey}:${value}`;
+        })
         .join(",");
 
       const response = await axios.get("/api/download_tickets", {
