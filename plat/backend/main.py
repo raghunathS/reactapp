@@ -2,6 +2,8 @@ import pandas as pd
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 from fastapi import FastAPI, Response, HTTPException
+from fastapi.responses import StreamingResponse
+from io import StringIO
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import json
@@ -367,6 +369,103 @@ def get_total_ticket_count_by_appcode(year: int, csp: str, environment: Optional
 
     return total_counts.to_dict()
 
+@app.get("/api/download_tickets")
+def download_tickets(
+    sortField: str,
+    sortOrder: str,
+    filters: Optional[str] = None,
+    global_year: int = 2024,
+    global_environment: str = "All",
+    global_narrow_environment: str = "All",
+    visibleColumns: Optional[str] = None
+):
+    df_full = get_data(global_year, global_environment, global_narrow_environment)
+
+    # Filtering
+    query_parts = []
+    if filters:
+        filter_list = filters.split(',')
+        for f in filter_list:
+            if ':' in f:
+                col, val = f.split(':', 1)
+                if col in df_full.columns:
+                    query_parts.append(f'`{col}`.str.contains("{val}", case=False, na=False)')
+
+    if query_parts:
+        df_filtered = df_full.query(' and '.join(query_parts))
+    else:
+        df_filtered = df_full
+
+    # Sorting
+    if sortField and sortField in df_filtered.columns:
+        df_sorted = df_filtered.sort_values(by=sortField, ascending=(sortOrder == 'asc'))
+    else:
+        df_sorted = df_filtered
+
+    # Column Selection
+    if visibleColumns:
+        cols_to_show = visibleColumns.split(',')
+        # Ensure all requested columns exist in the dataframe
+        cols_to_show_exist = [col for col in cols_to_show if col in df_sorted.columns]
+        final_df = df_sorted[cols_to_show_exist]
+    else:
+        final_df = df_sorted
+
+    # Generate CSV
+    output = StringIO()
+    final_df.to_csv(output, index=False)
+    output.seek(0)
+
+    return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=tickets.csv"})
+
+
+@app.get("/api/download_tickets")
+def download_tickets(
+    sortField: Optional[str] = None,
+    sortOrder: Optional[str] = None,
+    filters: Optional[str] = None,
+    global_year: Optional[int] = None,
+    global_environment: Optional[str] = None,
+    global_narrow_environment: Optional[str] = None,
+    visibleColumns: Optional[str] = None
+):
+    # Start with the full dataset, applying global filters first
+    df = get_data(global_year, global_environment, global_narrow_environment)
+
+    # Apply column-specific filters from the table UI
+    if filters:
+        query_parts = []
+        filter_list = filters.split(',')
+        for f in filter_list:
+            if ':' in f:
+                col, val = f.split(':', 1)
+                if col in df.columns and val:
+                    query_parts.append(f'`{col}`.str.contains("{val}", case=False, na=False)')
+        
+        if query_parts:
+            df = df.query(' and '.join(query_parts))
+
+    # Sorting
+    if sortField and sortField in df.columns:
+        df = df.sort_values(by=sortField, ascending=(sortOrder == 'asc'))
+
+    # Column Selection
+    final_df = df
+    if visibleColumns:
+        cols_to_show = visibleColumns.split(',')
+        # Ensure all requested columns exist in the dataframe before selection
+        cols_to_show_exist = [col for col in cols_to_show if col in df.columns]
+        if cols_to_show_exist:
+            final_df = df[cols_to_show_exist]
+
+    # Generate CSV
+    output = StringIO()
+    final_df.to_csv(output, index=False)
+    output.seek(0)
+
+    return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=tickets.csv"})
+
+
 @app.get("/api/reports/control-count-by-appcode")
 async def get_control_count_by_appcode(year: int, csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
     df = get_data(year, environment, narrow_environment)
@@ -533,44 +632,4 @@ def get_heartbeat_status(csp: str, year: Optional[int] = None, environment: Opti
     }
 
 
-@app.get("/api/tickets/download")
-def download_tickets_csv(
-    year: Optional[int] = None,
-    environment: Optional[str] = None,
-    narrow_environment: Optional[str] = None,
-    Key: Optional[str] = None,
-    Summary: Optional[str] = None,
-    Priority: Optional[str] = None,
-    CSP: Optional[str] = None,
-    AppCode: Optional[str] = None,
-    AlertType: Optional[str] = None,
-    ConfigRule: Optional[str] = None,
-    Account: Optional[str] = None
-):
-    """Endpoint to download tickets as a CSV file, with optional filtering."""
-    df = get_data(year, environment, narrow_environment)
 
-    # Apply column-specific filters
-    if Key:
-        df = df[df['Key'].str.contains(Key, case=False, na=False)]
-    if Summary:
-        df = df[df['Summary'].str.contains(Summary, case=False, na=False)]
-    if Priority:
-        df = df[df['Priority'].str.contains(Priority, case=False, na=False)]
-    if CSP:
-        df = df[df['CSP'].str.contains(CSP, case=False, na=False)]
-    if AppCode:
-        df = df[df['AppCode'].str.contains(AppCode, case=False, na=False)]
-    if AlertType:
-        df = df[df['AlertType'].str.contains(AlertType, case=False, na=False)]
-    if ConfigRule:
-        df = df[df['ConfigRule'].str.contains(ConfigRule, case=False, na=False)]
-    if Account:
-        df = df[df['Account'].str.contains(Account, case=False, na=False)]
-
-    csv_data = df.to_csv(index=False)
-    return Response(
-        content=csv_data,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=tickets.csv"}
-    )
