@@ -356,6 +356,81 @@ async def get_ticket_count_by_appcode(year: int, csp: str, environment: Optional
         "app_codes": app_codes
     }
 
+@app.get("/api/appcode-trends-daily")
+def get_appcode_trends_daily(year: int, month: int, csp: str, app_codes: str):
+    """
+    Provides daily trend data for a given list of AppCodes within a specific month.
+    """
+    df = get_data(year=year)
+    df_csp = df[df['CSP'] == csp].copy()
+    
+    selected_app_codes = [code.strip() for code in app_codes.split(',')]
+    
+    df['tCreated'] = pd.to_datetime(df['tCreated'])
+    df_month = df_csp[df_csp['tCreated'].dt.month == month]
+
+    df_filtered = df_month[df_month['AppCode'].isin(selected_app_codes)]
+
+    if df_filtered.empty:
+        return {"daily_trend": [], "daily_heatmap": [], "app_codes": selected_app_codes}
+
+    df_filtered['Day'] = df_filtered['tCreated'].dt.strftime('%Y-%m-%d')
+    days_order = sorted(df_filtered['Day'].unique())
+
+    # 1. Daily Trend data (Line chart)
+    daily_trend_df = df_filtered.groupby('Day').size().reset_index(name='count')
+    daily_trend_df = daily_trend_df.set_index('Day').reindex(days_order, fill_value=0).reset_index()
+    daily_trend_data = daily_trend_df.to_dict(orient='records')
+
+    # 2. Daily Heatmap data (for per-appcode lines)
+    daily_heatmap_df = df_filtered.groupby(['Day', 'AppCode']).size().unstack(fill_value=0)
+    daily_heatmap_df = daily_heatmap_df.reindex(days_order, fill_value=0)
+    daily_heatmap_df = daily_heatmap_df.reindex(columns=selected_app_codes, fill_value=0)
+    daily_heatmap_data = daily_heatmap_df.reset_index().to_dict(orient='records')
+
+    return {
+        "daily_trend": daily_trend_data,
+        "daily_heatmap": daily_heatmap_data,
+        "app_codes": selected_app_codes
+    }
+
+
+@app.get("/api/appcode-trends")
+def get_appcode_trends(year: int, csp: str, app_codes: str):
+    """
+    Provides historical trend data for a given list of AppCodes.
+    - app_codes: A comma-separated string of AppCodes.
+    """
+    df = get_data(year=year)
+    df_csp = df[df['CSP'] == csp].copy()
+    
+    selected_app_codes = [code.strip() for code in app_codes.split(',')]
+    
+    df_filtered = df_csp[df_csp['AppCode'].isin(selected_app_codes)]
+    
+    if df_filtered.empty:
+        return {"monthly_trend": [], "monthly_heatmap": [], "app_codes": selected_app_codes}
+
+    df_filtered['Month'] = pd.to_datetime(df_filtered['tCreated']).dt.strftime('%Y-%m')
+    months_order = sorted(df_filtered['Month'].unique())
+
+    # 1. Monthly Trend data (Line chart)
+    monthly_trend_df = df_filtered.groupby('Month').size().reset_index(name='count')
+    monthly_trend_df = monthly_trend_df.set_index('Month').reindex(months_order, fill_value=0).reset_index()
+    monthly_trend_data = monthly_trend_df.to_dict(orient='records')
+
+    # 2. Monthly Heatmap data
+    monthly_heatmap_df = df_filtered.groupby(['Month', 'AppCode']).size().unstack(fill_value=0)
+    monthly_heatmap_df = monthly_heatmap_df.reindex(months_order, fill_value=0)
+    monthly_heatmap_df = monthly_heatmap_df.reindex(columns=selected_app_codes, fill_value=0)
+    monthly_heatmap_data = monthly_heatmap_df.reset_index().to_dict(orient='records')
+
+    return {
+        "monthly_trend": monthly_trend_data,
+        "monthly_heatmap": monthly_heatmap_data,
+        "app_codes": selected_app_codes
+    }
+
 @app.get("/api/reports/total-ticket-count-by-appcode")
 def get_total_ticket_count_by_appcode(year: int, csp: str, environment: Optional[str] = None, narrow_environment: Optional[str] = None):
     df_full = get_data(year, environment, narrow_environment)

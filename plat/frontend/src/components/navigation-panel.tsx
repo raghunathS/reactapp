@@ -26,14 +26,10 @@ export default function NavigationPanel() {
       },
       {
         type: "section",
-        text: "AWS",
-        items: [{ type: "link", text: "SecOps Reports", href: "/aws/secops-reports" }],
-      },
-      {
-        type: "section",
-        text: "GCP",
+        text: "SecOps",
         items: [
-          { type: "link", text: "SecOps Reports", href: "/gcp/secops-reports" },
+          { type: "link", text: "All Reports", href: "/secops/all-reports" },
+          { type: "link", text: "AppCode Trends", href: "/secops/appcode-trends" },
         ],
       },
       {
