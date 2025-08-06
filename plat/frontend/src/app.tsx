@@ -9,9 +9,9 @@ import { USE_BROWSER_ROUTER } from "./common/constants";
 import GlobalHeader from "./components/global-header";
 import DashboardPage from "./pages/dashboard/dashboard-page";
 import ViewItemPage from "./pages/aws/view-item/view-item-page";
-import AllItemsPage from "./pages/aws/secops-reports/secops-reports-page";
 import AddItemPage from "./pages/aws/add-item/add-item-page";
-import Item1Page from "./pages/gcp/secops-reports-page";
+import AllReportsPage from "./pages/SecOps/AllReports";
+import AppCodeTrendsPage from "./pages/SecOps/AppCodeTrends";
 import ChatbotPage from './pages/agents/chatbot-page';
 import ConfluencePage from './pages/whitepapers/confluence-page';
 import HeartbeatPage from './pages/Heartbeat';
@@ -32,11 +32,11 @@ export default function App() {
           <Routes>
             <Route index path="/" element={<DashboardPage />} />
             <Route path="/aws" element={<Outlet />}>
-              <Route path="secops-reports" element={<AllItemsPage />} />
               <Route path="add" element={<AddItemPage />} />
               <Route path="secops-reports/:itemId" element={<ViewItemPage />} />
             </Route>
-            <Route path="/gcp/secops-reports" element={<Item1Page />} />
+            <Route path="/secops/all-reports" element={<AllReportsPage />} />
+            <Route path="/secops/appcode-trends" element={<AppCodeTrendsPage />} />
             <Route path="/agents/:agentName" element={<ChatbotPage />} />
             <Route path="/whitepapers/confluence" element={<ConfluencePage />} />
             <Route path="/heartbeat" element={<HeartbeatPage />} />
