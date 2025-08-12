@@ -79,7 +79,7 @@ const MonthlyTrendChart = ({ data, heatmapData, appCodes, loading, csp, year }: 
       }
     },
     xaxis: {
-      categories: view === 'monthly' ? data.map(item => item.Month) : dailyData.map(item => item.Day),
+
       title: {
         text: view === 'monthly' ? 'Month' : 'Day'
       },
@@ -99,18 +99,22 @@ const MonthlyTrendChart = ({ data, heatmapData, appCodes, loading, csp, year }: 
     },
     dataLabels: {
       enabled: false
+    },
+    legend: {
+      position: 'bottom',
+      horizontalAlign: 'center'
     }
   };
 
       const monthlyChartSeries = [
     {
       name: 'Total Tickets',
-      data: data.map(item => item.count),
+      data: data.map(item => [new Date(item.Month).getTime(), item.count]),
       type: 'area',
     },
     ...appCodes.map(code => ({
         name: code,
-        data: heatmapData.map(row => row[code] || 0),
+        data: heatmapData.map(item => [new Date(item.Month).getTime(), item[code] || 0]),
         type: 'line',
     }))
   ];

@@ -395,6 +395,47 @@ def get_appcode_trends_daily(year: int, month: int, csp: str, app_codes: str):
     }
 
 
+@app.get("/api/appcode-configrule-trends")
+def get_appcode_configrule_trends(
+    year: int,
+    csp: str,
+    app_codes: str,
+    environment: Optional[str] = None,
+    narrow_environment: Optional[str] = None
+):
+    """
+    Provides monthly trend data for ConfigRules related to a given list of AppCodes.
+    """
+    df = get_data(year=year, environment=environment, narrow_environment=narrow_environment)
+    df_csp = df[df['CSP'] == csp].copy()
+    
+    selected_app_codes = [code.strip() for code in app_codes.split(',')]
+    df_filtered = df_csp[df_csp['AppCode'].isin(selected_app_codes)]
+    
+    # Drop rows where ConfigRule is NaN or empty, as they can't be trended
+    df_filtered = df_filtered.dropna(subset=['ConfigRule'])
+    df_filtered = df_filtered[df_filtered['ConfigRule'] != '']
+
+    if df_filtered.empty:
+        return {"trend_data": [], "config_rules": []}
+
+    df_filtered['Month'] = pd.to_datetime(df_filtered['tCreated']).dt.strftime('%Y-%m')
+    months_order = sorted(df_filtered['Month'].unique())
+    config_rules_order = sorted(df_filtered['ConfigRule'].unique())
+
+    trend_df = df_filtered.groupby(['Month', 'ConfigRule']).size().unstack(fill_value=0)
+    trend_df = trend_df.reindex(months_order, fill_value=0)
+    trend_df = trend_df.reindex(columns=config_rules_order, fill_value=0)
+    trend_df['Total'] = trend_df.apply(pd.to_numeric).sum(axis=1)
+    
+    trend_data = trend_df.reset_index().to_dict(orient='records')
+
+    return {
+        "trend_data": trend_data,
+        "config_rules": config_rules_order
+    }
+
+
 @app.get("/api/appcode-trends")
 def get_appcode_trends(
     year: int, 

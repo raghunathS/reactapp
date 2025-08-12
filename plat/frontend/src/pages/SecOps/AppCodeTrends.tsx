@@ -19,6 +19,7 @@ import BaseAppLayout from '../../components/base-app-layout';
 import { useGlobalFilters } from '../../common/contexts/GlobalFilterContext';
 import MonthlyTrendChart from '../../components/trends/MonthlyTrendChart';
 import MonthlyAppCodeHeatmap from '../../components/trends/MonthlyAppCodeHeatmap';
+import ConfigRuleTrendChart from '../../components/trends/ConfigRuleTrendChart';
 
 const TrendLayout = ({ csp }: { csp: 'AWS' | 'GCP' }) => {
   const { selectedYear: year, selectedEnvironment, selectedNarrowEnvironment } = useGlobalFilters();
@@ -27,6 +28,8 @@ const TrendLayout = ({ csp }: { csp: 'AWS' | 'GCP' }) => {
   const [trendData, setTrendData] = useState<any[]>([]);
   const [heatmapData, setHeatmapData] = useState<any[]>([]);
   const [heatmapAppCodes, setHeatmapAppCodes] = useState<string[]>([]);
+  const [configRuleTrendData, setConfigRuleTrendData] = useState<any[]>([]);
+  const [configRules, setConfigRules] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +52,7 @@ const TrendLayout = ({ csp }: { csp: 'AWS' | 'GCP' }) => {
     if (selectedAppCodes.length === 0) {
       setTrendData([]);
       setHeatmapData([]);
+      setConfigRuleTrendData([]);
       return;
     }
 
@@ -67,13 +71,36 @@ const TrendLayout = ({ csp }: { csp: 'AWS' | 'GCP' }) => {
           }
         });
         setTrendData(response.data.monthly_trend);
-        setHeatmapData(response.data.monthly_heatmap);
-        setHeatmapAppCodes(response.data.app_codes);
+        const trendResponse = await axios.get(`/api/appcode-trends`, {
+          params: { 
+            year, 
+            csp, 
+            app_codes: appCodeValues,
+            environment: selectedEnvironment,
+            narrow_environment: selectedNarrowEnvironment
+          }
+        });
+        setTrendData(trendResponse.data.monthly_trend);
+        setHeatmapData(trendResponse.data.monthly_heatmap);
+        setHeatmapAppCodes(trendResponse.data.app_codes);
+
+        const configRuleResponse = await axios.get(`/api/appcode-configrule-trends`, {
+          params: { 
+            year, 
+            csp, 
+            app_codes: appCodeValues,
+            environment: selectedEnvironment,
+            narrow_environment: selectedNarrowEnvironment
+          }
+        });
+        setConfigRuleTrendData(configRuleResponse.data.trend_data);
+        setConfigRules(configRuleResponse.data.config_rules);
       } catch (error) {
         console.error('Error fetching trend data:', error);
         setError('Failed to load trend data. Please check the connection and try again.');
         setTrendData([]);
         setHeatmapData([]);
+        setConfigRuleTrendData([]);
       } finally {
         setLoading(false);
       }
@@ -106,7 +133,8 @@ const TrendLayout = ({ csp }: { csp: 'AWS' | 'GCP' }) => {
             csp={csp}
             year={year}
           />
-          <MonthlyAppCodeHeatmap data={heatmapData} appCodes={heatmapAppCodes} loading={loading} />
+                    <MonthlyAppCodeHeatmap data={heatmapData} appCodes={heatmapAppCodes} loading={loading} />
+          <ConfigRuleTrendChart data={configRuleTrendData} configRules={configRules} loading={loading} />
         </Grid>
       ) : !error ? (
         <Box textAlign="center" color="text-body-secondary">
