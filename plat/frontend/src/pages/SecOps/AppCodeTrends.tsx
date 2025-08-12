@@ -21,7 +21,7 @@ import MonthlyTrendChart from '../../components/trends/MonthlyTrendChart';
 import MonthlyAppCodeHeatmap from '../../components/trends/MonthlyAppCodeHeatmap';
 
 const TrendLayout = ({ csp }: { csp: 'AWS' | 'GCP' }) => {
-  const { selectedYear: year } = useGlobalFilters();
+  const { selectedYear: year, selectedEnvironment, selectedNarrowEnvironment } = useGlobalFilters();
   const [appCodes, setAppCodes] = useState<{ label: string; value: string; }[]>([]);
   const [selectedAppCodes, setSelectedAppCodes] = useState<readonly MultiselectProps.Option[]>([]);
   const [trendData, setTrendData] = useState<any[]>([]);
@@ -58,7 +58,13 @@ const TrendLayout = ({ csp }: { csp: 'AWS' | 'GCP' }) => {
       try {
         const appCodeValues = selectedAppCodes.map(opt => opt.value).join(',');
         const response = await axios.get(`/api/appcode-trends`, {
-          params: { year, csp, app_codes: appCodeValues }
+          params: { 
+            year, 
+            csp, 
+            app_codes: appCodeValues,
+            environment: selectedEnvironment,
+            narrow_environment: selectedNarrowEnvironment
+          }
         });
         setTrendData(response.data.monthly_trend);
         setHeatmapData(response.data.monthly_heatmap);
@@ -74,7 +80,7 @@ const TrendLayout = ({ csp }: { csp: 'AWS' | 'GCP' }) => {
     };
 
     fetchTrendData();
-  }, [selectedAppCodes, csp, year]);
+  }, [selectedAppCodes, csp, year, selectedEnvironment, selectedNarrowEnvironment]);
 
   return (
     <SpaceBetween size="l">

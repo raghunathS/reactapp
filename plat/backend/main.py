@@ -396,12 +396,18 @@ def get_appcode_trends_daily(year: int, month: int, csp: str, app_codes: str):
 
 
 @app.get("/api/appcode-trends")
-def get_appcode_trends(year: int, csp: str, app_codes: str):
+def get_appcode_trends(
+    year: int, 
+    csp: str, 
+    app_codes: str,
+    environment: Optional[str] = None, 
+    narrow_environment: Optional[str] = None
+):
     """
     Provides historical trend data for a given list of AppCodes.
     - app_codes: A comma-separated string of AppCodes.
     """
-    df = get_data(year=year)
+    df = get_data(year=year, environment=environment, narrow_environment=narrow_environment)
     df_csp = df[df['CSP'] == csp].copy()
     
     selected_app_codes = [code.strip() for code in app_codes.split(',')]
