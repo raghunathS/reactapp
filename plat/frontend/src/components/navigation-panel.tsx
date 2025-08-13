@@ -47,8 +47,7 @@ export default function NavigationPanel() {
         type: "section",
         text: "Agents",
         items: [
-          { type: "link", text: "AWS", href: "/agents/aws" },
-          { type: "link", text: "GCP", href: "/agents/gcp" },
+          { type: "link", text: "Agent", href: "/agent" },
         ],
       },
       {

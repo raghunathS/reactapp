@@ -1,14 +1,29 @@
-import pandas as pd
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
-from fastapi import FastAPI, Response, HTTPException
-from fastapi.responses import StreamingResponse
-from io import StringIO
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+import os
 import json
+import subprocess
 import logging
+from io import StringIO
+from typing import Optional, List, Dict, Any
+
+import pandas as pd
+import google.generativeai as genai
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, Query, HTTPException, Body, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
+
 import atc
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Configure the generative AI model with the API key
+api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    raise ValueError("GOOGLE_API_KEY not found in .env file or is empty")
+genai.configure(api_key=api_key)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -434,6 +449,83 @@ def get_appcode_configrule_trends(
         "trend_data": trend_data,
         "config_rules": config_rules_order
     }
+
+class ChatRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = 'gemini-pro'
+
+@app.get("/api/agent/models")
+async def list_agent_models():
+    try:
+        # Filter models that support the 'generateContent' method
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # We only want the user-friendly name (e.g., 'gemini-pro') not 'models/gemini-pro'
+        cleaned_models = [name.replace('models/', '') for name in models]
+        return {"models": cleaned_models}
+    except Exception as e:
+        logger.error(f"Error listing models: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve models.")
+
+def run_aws_command(command: str) -> str:
+    """Executes an AWS CLI command and returns the output."""
+    try:
+        # Security Note: In a real-world scenario, you'd want to sanitize this command string.
+        # For this demo, we'll assume the commands are safe.
+        result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        return f"Error executing command: {e}\nStderr: {e.stderr}"
+
+def run_gcp_command(command: str) -> str:
+    """Executes a GCP CLI (gcloud) command and returns the output."""
+    try:
+        result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        return f"Error executing command: {e}\nStderr: {e.stderr}"
+
+@app.post("/api/agent/chat")
+async def agent_chat(request: ChatRequest):
+    try:
+        model_name = request.model if request.model else 'gemini-pro'
+        
+        # Define the tools the model can use. The library inspects the function signature.
+        tools = [run_aws_command, run_gcp_command]
+        model = genai.GenerativeModel(model_name=model_name, tools=tools)
+        
+        # Start a chat session
+        chat = model.start_chat()
+        response = chat.send_message(request.prompt)
+
+        # Handle tool calls from the model
+        while response.parts and response.parts[0].function_call:
+            function_call = response.parts[0].function_call
+            
+            available_tools = {
+                "run_aws_command": run_aws_command,
+                "run_gcp_command": run_gcp_command
+            }
+            
+            function_name = function_call.name
+            tool_function = available_tools.get(function_name)
+
+            if tool_function:
+                function_args = {key: value for key, value in function_call.args.items()}
+                tool_output = tool_function(**function_args)
+                
+                # Send the tool's output back to the model in the correct format
+                response = chat.send_message(
+                    [dict(function_response=dict(name=function_name, response={"output": tool_output}))]
+                )
+            else:
+                response = chat.send_message(
+                    [dict(function_response=dict(name=function_name, response={"error": f"Tool '{function_name}' not found."}))]
+                )
+
+        return {"response": response.text}
+    except Exception as e:
+        logger.error(f"Error in /api/agent/chat: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/appcode-trends")

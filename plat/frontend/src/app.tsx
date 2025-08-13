@@ -12,7 +12,7 @@ import ViewItemPage from "./pages/aws/view-item/view-item-page";
 import AddItemPage from "./pages/aws/add-item/add-item-page";
 import AllReportsPage from "./pages/SecOps/AllReports";
 import AppCodeTrendsPage from "./pages/SecOps/AppCodeTrends";
-import ChatbotPage from './pages/agents/chatbot-page';
+import AgentPage from './pages/agents/AgentPage';
 import ConfluencePage from './pages/whitepapers/confluence-page';
 import HeartbeatPage from './pages/Heartbeat';
 import FinOpsPage from './pages/FinOps';
@@ -37,7 +37,7 @@ export default function App() {
             </Route>
             <Route path="/secops/all-reports" element={<AllReportsPage />} />
             <Route path="/secops/appcode-trends" element={<AppCodeTrendsPage />} />
-            <Route path="/agents/:agentName" element={<ChatbotPage />} />
+            <Route path="/agent" element={<AgentPage />} />
             <Route path="/whitepapers/confluence" element={<ConfluencePage />} />
             <Route path="/heartbeat" element={<HeartbeatPage />} />
             <Route path="/finops" element={<FinOpsPage />} />

@@ -1,4 +1,6 @@
 fastapi
-uvicorn
+uvicorn[standard]
+google-generativeai
 pandas
 Faker
+python-dotenv
