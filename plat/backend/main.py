@@ -445,19 +445,24 @@ async def get_aging_summary(
     if priority and priority != 'All':
         filtered_df = filtered_df[filtered_df['Priority'] == priority]
 
-    # Define the desired sort order
+    # Define the desired sort order for all categorical fields
     env_order = ['PROD', 'Non Prod']
     priority_order = ['Hightened', 'Critical', 'High', 'Medium', 'Low', 'Unknown']
+    csp_order = sorted(filtered_df['CSP'].unique()) # Alphabetical sort for now
+    alert_type_order = sorted(filtered_df['AlertType'].unique()) # Alphabetical sort for now
 
-    # Dynamically create categorical types based on what's in the data
-    # This prevents errors if the CSV is missing a certain category
-    env_categories_in_data = [e for e in env_order if e in filtered_df['Environment'].unique()]
-    prio_categories_in_data = [p for p in priority_order if p in filtered_df['Priority'].unique()]
+    # Dynamically create categorical types based on what's in the data.
+    # This prevents errors if the CSV is missing a certain category.
+    def set_category(df, column, order):
+        categories_in_data = [c for c in order if c in df[column].unique()]
+        if categories_in_data:
+            df[column] = pd.Categorical(df[column], categories=categories_in_data, ordered=True)
+        return df
 
-    if env_categories_in_data:
-        filtered_df['Environment'] = pd.Categorical(filtered_df['Environment'], categories=env_categories_in_data, ordered=True)
-    if prio_categories_in_data:
-        filtered_df['Priority'] = pd.Categorical(filtered_df['Priority'], categories=prio_categories_in_data, ordered=True)
+    filtered_df = set_category(filtered_df, 'CSP', csp_order)
+    filtered_df = set_category(filtered_df, 'Environment', env_order)
+    filtered_df = set_category(filtered_df, 'Priority', priority_order)
+    filtered_df = set_category(filtered_df, 'AlertType', alert_type_order)
 
     # Sort the DataFrame by the desired hierarchy
     sorted_df = filtered_df.sort_values(by=['CSP', 'Environment', 'Priority', 'AlertType'])
