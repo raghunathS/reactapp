@@ -149,6 +149,9 @@ def startup_event():
     except FileNotFoundError:
         logger.error("soc_output_summary.csv not found. Aging summary will be unavailable.")
         aging_df = pd.DataFrame()
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while loading aging data: {e}")
+        aging_df = pd.DataFrame()
 
 def get_data(year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None) -> pd.DataFrame:
     """
@@ -400,8 +403,8 @@ async def get_ticket_count_by_appcode(year: int, csp: str, environment: Optional
     chart_data = pivot_df.reset_index().to_dict(orient='records')
     
     return {
-        "aws": aws_summary,
-        "gcp": gcp_summary,
+        "data": chart_data,
+        "app_codes": app_codes,
     }
 
 @app.get("/api/aging-filter-options")
