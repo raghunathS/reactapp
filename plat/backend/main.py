@@ -445,6 +445,11 @@ async def get_aging_summary(
     if priority and priority != 'All':
         filtered_df = filtered_df[filtered_df['Priority'] == priority]
 
+    # Fill any potential NaN values in key categorical columns before sorting
+    for col in ['CSP', 'Environment', 'AlertType', 'Priority']:
+        if col in filtered_df.columns:
+            filtered_df[col] = filtered_df[col].fillna('Unknown')
+
     # Define the desired sort order for all categorical fields
     env_order = ['PROD', 'Non Prod']
     priority_order = ['Hightened', 'Critical', 'High', 'Medium', 'Low', 'Unknown']
