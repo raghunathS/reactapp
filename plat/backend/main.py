@@ -445,27 +445,25 @@ async def get_aging_summary(
     if priority and priority != 'All':
         filtered_df = filtered_df[filtered_df['Priority'] == priority]
 
-    # Define the custom sort order for Environment and Priority
+    # Define the desired sort order
     env_order = ['PROD', 'Non Prod']
     priority_order = ['Hightened', 'Critical', 'High', 'Medium', 'Low', 'Unknown']
 
-    # Create mapping for sorting
-    env_map = {env: i for i, env in enumerate(env_order)}
-    priority_map = {prio: i for i, prio in enumerate(priority_order)}
+    # Dynamically create categorical types based on what's in the data
+    # This prevents errors if the CSV is missing a certain category
+    env_categories_in_data = [e for e in env_order if e in filtered_df['Environment'].unique()]
+    prio_categories_in_data = [p for p in priority_order if p in filtered_df['Priority'].unique()]
 
-    # Apply mapping to new columns for sorting
-    filtered_df['env_sort'] = filtered_df['Environment'].map(env_map)
-    filtered_df['prio_sort'] = filtered_df['Priority'].map(priority_map)
+    if env_categories_in_data:
+        filtered_df['Environment'] = pd.Categorical(filtered_df['Environment'], categories=env_categories_in_data, ordered=True)
+    if prio_categories_in_data:
+        filtered_df['Priority'] = pd.Categorical(filtered_df['Priority'], categories=prio_categories_in_data, ordered=True)
 
-    # Sort the DataFrame using the new sort columns
-    sorted_df = filtered_df.sort_values(by=['CSP', 'env_sort', 'prio_sort', 'AlertType'])
-
-    # Drop the temporary sort columns before returning
-    sorted_df = sorted_df.drop(columns=['env_sort', 'prio_sort'])
+    # Sort the DataFrame by the desired hierarchy
+    sorted_df = filtered_df.sort_values(by=['CSP', 'Environment', 'Priority', 'AlertType'])
 
     # Replace NaN with None for JSON compatibility before returning
     final_df = sorted_df.where(pd.notnull(sorted_df), None)
-
     return final_df.to_dict(orient='records')
 
 @app.get("/api/appcode-trends-daily")
