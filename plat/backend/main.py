@@ -144,8 +144,25 @@ def startup_event():
     global aging_df
     try:
         aging_data_path = os.path.join(os.path.dirname(__file__), 'data', 'soc_output_summary.csv')
-        aging_df = pd.read_csv(aging_data_path)
-        logger.info("Aging summary data loaded successfully.")
+        # Load all data as string type to prevent pandas from auto-detecting
+        # mixed types (e.g., '5' as int) in categorical columns like 'AlertType'.
+        aging_df = pd.read_csv(aging_data_path, dtype=str)
+        # Strip whitespace from column headers to prevent lookup errors
+        aging_df.columns = aging_df.columns.str.strip()
+
+        # Sanitize key categorical columns immediately after loading
+        key_cols_to_sanitize = ['CSP', 'Environment', 'AlertType', 'Priority']
+        for col_name in aging_df.columns:
+            if col_name in key_cols_to_sanitize:
+                aging_df[col_name] = aging_df[col_name].fillna('Unknown')
+
+        # Convert numeric columns to numeric types, coercing errors to NaN
+        numeric_cols = ['issues', 'average_hour', 'total_issues', 'total_alerts', 'pending_issues', 'resolved_issues']
+        for col in numeric_cols:
+            if col in aging_df.columns:
+                aging_df[col] = pd.to_numeric(aging_df[col], errors='coerce')
+
+        logger.info("Aging summary data loaded and sanitized successfully.")
     except FileNotFoundError:
         logger.error("soc_output_summary.csv not found. Aging summary will be unavailable.")
         aging_df = pd.DataFrame()
@@ -436,6 +453,7 @@ async def get_aging_summary(
 
     filtered_df = aging_df.copy()
 
+    # --- Filtering ---
     if csp and csp != 'All':
         filtered_df = filtered_df[filtered_df['CSP'] == csp]
     if environment and environment != 'All':
@@ -445,29 +463,23 @@ async def get_aging_summary(
     if priority and priority != 'All':
         filtered_df = filtered_df[filtered_df['Priority'] == priority]
 
-    # Fill any potential NaN values in key categorical columns before sorting
-    for col in ['CSP', 'Environment', 'AlertType', 'Priority']:
-        if col in filtered_df.columns:
-            filtered_df[col] = filtered_df[col].fillna('Unknown')
-
     # Define the desired sort order for all categorical fields
     env_order = ['PROD', 'Non Prod']
     priority_order = ['Hightened', 'Critical', 'High', 'Medium', 'Low', 'Unknown']
-    csp_order = sorted(filtered_df['CSP'].unique()) # Alphabetical sort for now
-    alert_type_order = sorted(filtered_df['AlertType'].unique()) # Alphabetical sort for now
 
     # Dynamically create categorical types based on what's in the data.
-    # This prevents errors if the CSV is missing a certain category.
+    # This is the most robust way to sort, as it won't create NaNs if the
+    # data contains a value not present in the predefined sort order lists.
     def set_category(df, column, order):
+        # Filter the desired order to only include values present in the dataframe
         categories_in_data = [c for c in order if c in df[column].unique()]
         if categories_in_data:
             df[column] = pd.Categorical(df[column], categories=categories_in_data, ordered=True)
         return df
 
-    filtered_df = set_category(filtered_df, 'CSP', csp_order)
+    # Apply the robust categorical sorting
     filtered_df = set_category(filtered_df, 'Environment', env_order)
     filtered_df = set_category(filtered_df, 'Priority', priority_order)
-    filtered_df = set_category(filtered_df, 'AlertType', alert_type_order)
 
     # Sort the DataFrame by the desired hierarchy
     sorted_df = filtered_df.sort_values(by=['CSP', 'Environment', 'Priority', 'AlertType'])
