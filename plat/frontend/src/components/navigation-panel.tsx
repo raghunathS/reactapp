@@ -22,6 +22,7 @@ export default function NavigationPanel() {
         items: [
           { type: "link", text: "Overview", href: "/" },
           { type: "link", text: "Heartbeat", href: "/heartbeat" },
+          { type: "link", text: "Aging", href: "/aging" },
         ],
       },
       {

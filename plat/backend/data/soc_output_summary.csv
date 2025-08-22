@@ -1,0 +1,15 @@
+CSP,Environment,AlertType,Priority,issues,average_hours_to_close,resolved_within_24h,percent_of_total,percent_within_24h
+AWS,PROD,Alert,High,528,20.76,465,2.28,88.07
+AWS,PROD,Alert,Hightened,18,12.3,12,0.08,66.46
+AWS,PROD,Alert,Medium,350,15.5,300,1.51,85.71
+AWS,PROD,GuardDuty,Critical,120,5.2,110,0.52,91.67
+AWS,PROD,GuardDuty,High,250,10.1,220,1.08,88.00
+AWS,PROD,System,Unknown,50,48.0,10,0.22,20.00
+AWS,Non Prod,Alert,Low,1500,72.5,500,6.47,33.33
+AWS,Non Prod,Alert,Medium,800,30.2,650,3.45,81.25
+AWS,Non Prod,GuardDuty,Medium,400,18.9,350,1.73,87.50
+GCP,PROD,Alert,High,400,22.1,350,1.73,87.50
+GCP,PROD,Alert,Critical,75,4.5,70,0.32,93.33
+GCP,PROD,System,High,100,19.8,80,0.43,80.00
+GCP,Non Prod,Alert,Medium,1200,40.1,900,5.18,75.00
+GCP,Non Prod,GuardDuty,Low,600,60.5,250,2.59,41.67

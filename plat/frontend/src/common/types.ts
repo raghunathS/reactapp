@@ -44,3 +44,23 @@ export interface EnvironmentSummaryResponse {
   aws_stats: CSPStatistics;
   gcp_stats: CSPStatistics;
 }
+
+export interface AgingRecord {
+  CSP: string;
+  Environment: string;
+  AlertType: string;
+  Priority: string;
+  issues: number;
+  average_hours_to_close: number;
+  resolved_within_24h: number;
+  percent_of_total: number;
+  percent_within_24h: number;
+}
+
+export interface AgingFilterOptions {
+  CSP: string[];
+  Environment: string[];
+  AlertType: string[];
+  Priority: string[];
+}
+

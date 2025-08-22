@@ -11,6 +11,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, HTTPException, Body, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -68,12 +69,35 @@ confluence_pages = {
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
+    "http://localhost:3004",
+    "http://localhost:3005",
+    "http://localhost:3006",
+    "http://localhost:3007",
+    "http://localhost:3008",
+    "http://localhost:3009",
+    "http://localhost:3010",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include the ATC router to make its endpoints available
 app.include_router(atc.router, prefix="/api/atc", tags=["atc"])
 
 tickets_df = None
 aws_heartbeat_df = None
 gcp_heartbeat_df = None
+aging_df = None
 
 class CSPStatistics(BaseModel):
     total_tickets: int
@@ -112,10 +136,19 @@ def startup_event():
         gcp_heartbeat_df = pd.read_csv('gcp_heartbeat_ticket_data.csv')
         gcp_heartbeat_df['tCreated'] = pd.to_datetime(gcp_heartbeat_df['tCreated'])
         print("Heartbeat data loaded successfully.")
-    except FileNotFoundError as e:
-        print(f"Error: Heartbeat file {e.filename} not found. Heartbeat monitoring will be disabled.")
+    except FileNotFoundError:
+        logger.error("Heartbeat data files not found. Heartbeat charts will be unavailable.")
         aws_heartbeat_df = pd.DataFrame()
         gcp_heartbeat_df = pd.DataFrame()
+
+    global aging_df
+    try:
+        aging_data_path = os.path.join(os.path.dirname(__file__), 'data', 'soc_output_summary.csv')
+        aging_df = pd.read_csv(aging_data_path)
+        logger.info("Aging summary data loaded successfully.")
+    except FileNotFoundError:
+        logger.error("soc_output_summary.csv not found. Aging summary will be unavailable.")
+        aging_df = pd.DataFrame()
 
 def get_data(year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None) -> pd.DataFrame:
     """
@@ -367,9 +400,67 @@ async def get_ticket_count_by_appcode(year: int, csp: str, environment: Optional
     chart_data = pivot_df.reset_index().to_dict(orient='records')
     
     return {
-        "data": chart_data,
-        "app_codes": app_codes
+        "aws": aws_summary,
+        "gcp": gcp_summary,
     }
+
+@app.get("/api/aging-filter-options")
+async def get_aging_filter_options():
+    if aging_df is None or aging_df.empty:
+        return {
+            "CSP": [],
+            "Environment": [],
+            "AlertType": [],
+            "Priority": []
+        }
+    options = {
+        "CSP": sorted(aging_df['CSP'].unique().tolist()),
+        "Environment": sorted(aging_df['Environment'].unique().tolist()),
+        "AlertType": sorted(aging_df['AlertType'].unique().tolist()),
+        "Priority": sorted(aging_df['Priority'].unique().tolist()),
+    }
+    return options
+
+@app.get("/api/aging-summary")
+async def get_aging_summary(
+    csp: Optional[str] = Query(None, alias="CSP"),
+    environment: Optional[str] = Query(None, alias="Environment"),
+    alert_type: Optional[str] = Query(None, alias="AlertType"),
+    priority: Optional[str] = Query(None, alias="Priority")
+):
+    if aging_df is None or aging_df.empty:
+        return []
+
+    filtered_df = aging_df.copy()
+
+    if csp and csp != 'All':
+        filtered_df = filtered_df[filtered_df['CSP'] == csp]
+    if environment and environment != 'All':
+        filtered_df = filtered_df[filtered_df['Environment'] == environment]
+    if alert_type and alert_type != 'All':
+        filtered_df = filtered_df[filtered_df['AlertType'] == alert_type]
+    if priority and priority != 'All':
+        filtered_df = filtered_df[filtered_df['Priority'] == priority]
+
+    # Define the custom sort order for Environment and Priority
+    env_order = ['PROD', 'Non Prod']
+    priority_order = ['Hightened', 'Critical', 'High', 'Medium', 'Low', 'Unknown']
+
+    # Create mapping for sorting
+    env_map = {env: i for i, env in enumerate(env_order)}
+    priority_map = {prio: i for i, prio in enumerate(priority_order)}
+
+    # Apply mapping to new columns for sorting
+    filtered_df['env_sort'] = filtered_df['Environment'].map(env_map)
+    filtered_df['prio_sort'] = filtered_df['Priority'].map(priority_map)
+
+    # Sort the DataFrame using the new sort columns
+    sorted_df = filtered_df.sort_values(by=['CSP', 'env_sort', 'prio_sort', 'AlertType'])
+
+    # Drop the temporary sort columns before returning
+    sorted_df = sorted_df.drop(columns=['env_sort', 'prio_sort'])
+
+    return sorted_df.to_dict(orient='records')
 
 @app.get("/api/appcode-trends-daily")
 def get_appcode_trends_daily(year: int, month: int, csp: str, app_codes: str):
