@@ -463,7 +463,10 @@ async def get_aging_summary(
     # Drop the temporary sort columns before returning
     sorted_df = sorted_df.drop(columns=['env_sort', 'prio_sort'])
 
-    return sorted_df.to_dict(orient='records')
+    # Replace NaN with None for JSON compatibility before returning
+    final_df = sorted_df.where(pd.notnull(sorted_df), None)
+
+    return final_df.to_dict(orient='records')
 
 @app.get("/api/appcode-trends-daily")
 def get_appcode_trends_daily(year: int, month: int, csp: str, app_codes: str):
