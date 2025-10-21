@@ -3,6 +3,7 @@ import json
 import subprocess
 import logging
 from io import StringIO
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 import pandas as pd
@@ -369,13 +370,19 @@ def get_environment_summary(year: Optional[int] = None, environment: Optional[st
         aws_total = int(df_aws.shape[0])
         gcp_total = int(df_gcp.shape[0])
 
-        current_year = 2025
-        current_month = 7 
+        # Use the actual current year and month (UTC) instead of hardcoded values
+        now = datetime.now(timezone.utc)
+        current_year = now.year
+        current_month = now.month
 
-        if year == current_year:
+        # If querying the current year, use months elapsed so far; otherwise default to 12 months
+        if year and year == current_year:
             divisor = current_month
         else:
             divisor = 12
+
+        # Safety guard to avoid division by zero
+        divisor = max(divisor, 1)
 
         aws_monthly_avg = round(aws_total / divisor, 1) if aws_total > 0 else 0
         gcp_monthly_avg = round(gcp_total / divisor, 1) if gcp_total > 0 else 0
