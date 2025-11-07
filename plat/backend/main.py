@@ -971,3 +971,39 @@ def get_heartbeat_status(csp: str, year: Optional[int] = None, environment: Opti
 
 
 
+
+@app.get("/api/tickets-monthly")
+def get_tickets_monthly(
+    year: int,
+    csp: Optional[str] = None,
+    environment: Optional[str] = None,
+    narrow_environment: Optional[str] = None,
+):
+    """
+    Returns total monthly ticket counts for the given filters.
+    Response: [{"month": "YYYY-MM", "count": int}]
+    """
+    try:
+        df = get_data(year=year, environment=environment, narrow_environment=narrow_environment)
+
+        if csp and csp != 'All':
+            df = df[df['CSP'].str.upper() == csp.upper()]
+
+        if df.empty:
+            # Return 12 months with zero counts for the requested year
+            months = pd.date_range(start=f"{year}-01-01", end=f"{year}-12-01", freq='MS').strftime('%Y-%m')
+            return [{"month": m, "count": 0} for m in months]
+
+        df['Month'] = pd.to_datetime(df['tCreated']).dt.strftime('%Y-%m')
+        # Ensure all months in the year are present
+        months_order = pd.date_range(start=f"{year}-01-01", end=f"{year}-12-01", freq='MS').strftime('%Y-%m')
+
+        monthly_counts = (
+            df.groupby('Month').size().reindex(months_order, fill_value=0).reset_index()
+        )
+        monthly_counts.columns = ['month', 'count']
+
+        return monthly_counts.to_dict(orient='records')
+    except Exception as e:
+        logger.error(f"Error in /api/tickets-monthly: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
