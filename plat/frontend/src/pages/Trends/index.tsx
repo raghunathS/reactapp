@@ -189,7 +189,7 @@ export default function TrendsPage() {
     }
 
     return series;
-  }, [data, mode, windowSize, resolvedBaseline]);
+  }, [data, mode, windowSize, resolvedBaseline, showScore, showPercentage, smoothing]);
 
   const latest = computedSeries[computedSeries.length - 1];
   const ytdAvg = useMemo(() => computedSeries.length ? computedSeries[computedSeries.length - 1].avg : 0, [computedSeries]);
@@ -438,7 +438,7 @@ export default function TrendsPage() {
               <Box>Loading...</Box>
             ) : (
               <div ref={trendChartRef}>
-                <ResponsiveContainer width="100%" height={360}>
+                <ResponsiveContainer width="100%" height={360} key={`trend-${mode}-${windowSize}-${baselineSource}-${showScore}-${showPercentage}-${smoothing}`}>
                   <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
@@ -462,7 +462,7 @@ export default function TrendsPage() {
 
           <Container header={<Header variant="h2">Delta vs Baseline</Header>}>
             <div ref={deltaChartRef}>
-              <ResponsiveContainer width="100%" height={240}>
+              <ResponsiveContainer width="100%" height={240} key={`delta-${mode}-${windowSize}-${baselineSource}-${showScore}-${showPercentage}-${smoothing}`}>
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
