@@ -152,8 +152,9 @@ export default function TrendsPage() {
 
     // Helper to compute score 1–5 based on delta vs baseline
     const computeScore = (delta: number, baseline: number) => {
-      if (delta > 0) return 5;
       const pct = baseline !== 0 ? (delta / baseline) * 100 : 0;
+      console.log('computeScore debug', { delta, baseline, pct });
+      if (delta > 0) return 5;
       if (pct >= -10) return 4; // within 10% of baseline
       if (pct >= -20) return 3;
       if (pct >= -30) return 2;
@@ -170,6 +171,7 @@ export default function TrendsPage() {
         const delta = avg - resolvedBaseline;
         const deltaPct = resolvedBaseline !== 0 ? ((avg - resolvedBaseline) / resolvedBaseline) * 100 : 0;
         const score = computeScore(delta, resolvedBaseline);
+        console.log('rolling entry', { month, avg, resolvedBaseline, delta, deltaPct, score });
         series.push({ month, actual: arr[i], avg, delta, deltaPct, score });
       }
     } else {
@@ -181,6 +183,7 @@ export default function TrendsPage() {
         const delta = avg - resolvedBaseline;
         const deltaPct = resolvedBaseline !== 0 ? ((avg - resolvedBaseline) / resolvedBaseline) * 100 : 0;
         const score = computeScore(delta, resolvedBaseline);
+        console.log('cumulative entry', { month, avg, resolvedBaseline, delta, deltaPct, score });
         series.push({ month, actual: arr[i], avg, delta, deltaPct, score });
       }
     }
