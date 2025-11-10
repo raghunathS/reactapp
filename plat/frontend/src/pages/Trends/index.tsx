@@ -157,7 +157,7 @@ export default function TrendsPage() {
       if (delta > 0) return 5;
       if (pct >= -10) return 4; // within 10% of baseline
       if (pct >= -20) return 3;
-      if (pct >= -30) return 2;
+      if (pct >= -50) return 2; // within 50% of baseline
       return 1; // 50%+ less
     };
 
