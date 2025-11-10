@@ -353,8 +353,8 @@ export default function TrendsPage() {
                   <>
                     <Box variant="awsui-key-label">Select Months</Box>
                     <Select
-                      selectedOptions={manualAvgMonths}
-                      onChange={({ detail }) => setManualAvgMonths(detail.selectedOptions || [])}
+                      selectedOption={manualAvgMonths as SelectProps.Option[]}
+                      onChange={({ detail }) => setManualAvgMonths((detail.selectedOption as SelectProps.Option[]) || [])}
                       options={monthOptions}
                       selectedAriaLabel="Selected months"
                       placeholder="Choose month(s)"
@@ -442,13 +442,13 @@ export default function TrendsPage() {
                   <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
-                    <YAxis allowDecimals={!showPercentage && !showScore} tickFormatter={showPercentage ? (v) => `${v}%` : showScore ? undefined : undefined} domain={showScore ? [0, 5] : undefined} />
+                    <YAxis allowDecimals={!showPercentage && !showScore} tickFormatter={showPercentage ? (v) => `${v}%` : undefined} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend />
                     {showBaseline && <ReferenceLine y={showPercentage ? 0 : showScore ? undefined : resolvedBaseline} stroke="#8884d8" strokeDasharray="3 3" label={showPercentage ? '0%' : showScore ? undefined : 'Baseline'} />}
                     <Line type="monotone" dataKey="actual" name="Actual" stroke="#82ca9d" />
-                    <Line type="monotone" dataKey="avg" name={showPercentage ? 'Delta %' : showScore ? 'Score (1–5)' : (mode === 'rolling' ? 'Rolling Avg' : 'Cumulative Avg')} stroke="#8884d8" />
-                    {showScore && <Line type="monotone" dataKey="score" name="Score (1–5)" stroke="#ff7300" strokeWidth={2} />}
+                    <Line type="monotone" dataKey="avg" name={showPercentage ? 'Delta %' : (mode === 'rolling' ? 'Rolling Avg' : 'Cumulative Avg')} stroke="#8884d8" />
+                    {showScore && <Line type="monotone" dataKey="score" name="Score (1-5)" stroke="#ff7300" strokeWidth={2} />}
                     {annotations.map(a => {
                       const point = chartData.find(d => d.month === a.month);
                       if (!point) return null;
