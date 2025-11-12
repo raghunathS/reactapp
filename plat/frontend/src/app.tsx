@@ -15,7 +15,9 @@ import AppCodeTrendsPage from "./pages/SecOps/AppCodeTrends";
 import AgentPage from './pages/agents/AgentPage';
 import ConfluencePage from './pages/whitepapers/confluence-page';
 import HeartbeatPage from './pages/Heartbeat';
+import AgingPage from './pages/Aging';
 import FinOpsPage from './pages/FinOps';
+import TrendsPage from './pages/Trends';
 import AtcPage from './pages/atc/atc-page';
 import NotFound from "./pages/not-found";
 import "./styles/app.scss";
@@ -40,6 +42,8 @@ export default function App() {
             <Route path="/agent" element={<AgentPage />} />
             <Route path="/whitepapers/confluence" element={<ConfluencePage />} />
             <Route path="/heartbeat" element={<HeartbeatPage />} />
+            <Route path="/aging" element={<AgingPage />} />
+            <Route path="/trends" element={<TrendsPage />} />
             <Route path="/finops" element={<FinOpsPage />} />
             <Route path="/atc/:provider" element={<AtcPage />} />
             <Route path="*" element={<NotFound />} />

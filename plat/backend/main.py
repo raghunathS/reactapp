@@ -3,6 +3,7 @@ import json
 import subprocess
 import logging
 from io import StringIO
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 import pandas as pd
@@ -10,6 +11,7 @@ import google.generativeai as genai
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, HTTPException, Body, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -68,12 +70,35 @@ confluence_pages = {
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
+    "http://localhost:3004",
+    "http://localhost:3005",
+    "http://localhost:3006",
+    "http://localhost:3007",
+    "http://localhost:3008",
+    "http://localhost:3009",
+    "http://localhost:3010",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include the ATC router to make its endpoints available
 app.include_router(atc.router, prefix="/api/atc", tags=["atc"])
 
 tickets_df = None
 aws_heartbeat_df = None
 gcp_heartbeat_df = None
+aging_df = None
 
 class CSPStatistics(BaseModel):
     total_tickets: int
@@ -112,10 +137,39 @@ def startup_event():
         gcp_heartbeat_df = pd.read_csv('gcp_heartbeat_ticket_data.csv')
         gcp_heartbeat_df['tCreated'] = pd.to_datetime(gcp_heartbeat_df['tCreated'])
         print("Heartbeat data loaded successfully.")
-    except FileNotFoundError as e:
-        print(f"Error: Heartbeat file {e.filename} not found. Heartbeat monitoring will be disabled.")
+    except FileNotFoundError:
+        logger.error("Heartbeat data files not found. Heartbeat charts will be unavailable.")
         aws_heartbeat_df = pd.DataFrame()
         gcp_heartbeat_df = pd.DataFrame()
+
+    global aging_df
+    try:
+        aging_data_path = os.path.join(os.path.dirname(__file__), 'data', 'soc_output_summary.csv')
+        # Load all data as string type to prevent pandas from auto-detecting
+        # mixed types (e.g., '5' as int) in categorical columns like 'AlertType'.
+        aging_df = pd.read_csv(aging_data_path, dtype=str)
+        # Strip whitespace from column headers to prevent lookup errors
+        aging_df.columns = aging_df.columns.str.strip()
+
+        # Sanitize key categorical columns immediately after loading
+        key_cols_to_sanitize = ['CSP', 'Environment', 'AlertType', 'Priority']
+        for col_name in aging_df.columns:
+            if col_name in key_cols_to_sanitize:
+                aging_df[col_name] = aging_df[col_name].fillna('Unknown')
+
+        # Convert numeric columns to numeric types, coercing errors to NaN
+        numeric_cols = ['issues', 'average_hour', 'total_issues', 'total_alerts', 'pending_issues', 'resolved_issues']
+        for col in numeric_cols:
+            if col in aging_df.columns:
+                aging_df[col] = pd.to_numeric(aging_df[col], errors='coerce')
+
+        logger.info("Aging summary data loaded and sanitized successfully.")
+    except FileNotFoundError:
+        logger.error("soc_output_summary.csv not found. Aging summary will be unavailable.")
+        aging_df = pd.DataFrame()
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while loading aging data: {e}")
+        aging_df = pd.DataFrame()
 
 def get_data(year: Optional[int] = None, environment: Optional[str] = None, narrow_environment: Optional[str] = None) -> pd.DataFrame:
     """
@@ -316,13 +370,19 @@ def get_environment_summary(year: Optional[int] = None, environment: Optional[st
         aws_total = int(df_aws.shape[0])
         gcp_total = int(df_gcp.shape[0])
 
-        current_year = 2025
-        current_month = 7 
+        # Use the actual current year and month (UTC) instead of hardcoded values
+        now = datetime.now(timezone.utc)
+        current_year = now.year
+        current_month = now.month
 
-        if year == current_year:
+        # If querying the current year, use months elapsed so far; otherwise default to 12 months
+        if year and year == current_year:
             divisor = current_month
         else:
             divisor = 12
+
+        # Safety guard to avoid division by zero
+        divisor = max(divisor, 1)
 
         aws_monthly_avg = round(aws_total / divisor, 1) if aws_total > 0 else 0
         gcp_monthly_avg = round(gcp_total / divisor, 1) if gcp_total > 0 else 0
@@ -368,8 +428,72 @@ async def get_ticket_count_by_appcode(year: int, csp: str, environment: Optional
     
     return {
         "data": chart_data,
-        "app_codes": app_codes
+        "app_codes": app_codes,
     }
+
+@app.get("/api/aging-filter-options")
+async def get_aging_filter_options():
+    if aging_df is None or aging_df.empty:
+        return {
+            "CSP": [],
+            "Environment": [],
+            "AlertType": [],
+            "Priority": []
+        }
+    options = {
+        "CSP": sorted(aging_df['CSP'].unique().tolist()),
+        "Environment": sorted(aging_df['Environment'].unique().tolist()),
+        "AlertType": sorted(aging_df['AlertType'].unique().tolist()),
+        "Priority": sorted(aging_df['Priority'].unique().tolist()),
+    }
+    return options
+
+@app.get("/api/aging-summary")
+async def get_aging_summary(
+    csp: Optional[str] = Query(None, alias="CSP"),
+    environment: Optional[str] = Query(None, alias="Environment"),
+    alert_type: Optional[str] = Query(None, alias="AlertType"),
+    priority: Optional[str] = Query(None, alias="Priority")
+):
+    if aging_df is None or aging_df.empty:
+        return []
+
+    filtered_df = aging_df.copy()
+
+    # --- Filtering ---
+    if csp and csp != 'All':
+        filtered_df = filtered_df[filtered_df['CSP'] == csp]
+    if environment and environment != 'All':
+        filtered_df = filtered_df[filtered_df['Environment'] == environment]
+    if alert_type and alert_type != 'All':
+        filtered_df = filtered_df[filtered_df['AlertType'] == alert_type]
+    if priority and priority != 'All':
+        filtered_df = filtered_df[filtered_df['Priority'] == priority]
+
+    # Define the desired sort order for all categorical fields
+    env_order = ['PROD', 'Non Prod']
+    priority_order = ['Hightened', 'Critical', 'High', 'Medium', 'Low', 'Unknown']
+
+    # Dynamically create categorical types based on what's in the data.
+    # This is the most robust way to sort, as it won't create NaNs if the
+    # data contains a value not present in the predefined sort order lists.
+    def set_category(df, column, order):
+        # Filter the desired order to only include values present in the dataframe
+        categories_in_data = [c for c in order if c in df[column].unique()]
+        if categories_in_data:
+            df[column] = pd.Categorical(df[column], categories=categories_in_data, ordered=True)
+        return df
+
+    # Apply the robust categorical sorting
+    filtered_df = set_category(filtered_df, 'Environment', env_order)
+    filtered_df = set_category(filtered_df, 'Priority', priority_order)
+
+    # Sort the DataFrame by the desired hierarchy
+    sorted_df = filtered_df.sort_values(by=['CSP', 'Environment', 'Priority', 'AlertType'])
+
+    # Replace NaN with None for JSON compatibility before returning
+    final_df = sorted_df.where(pd.notnull(sorted_df), None)
+    return final_df.to_dict(orient='records')
 
 @app.get("/api/appcode-trends-daily")
 def get_appcode_trends_daily(year: int, month: int, csp: str, app_codes: str):
@@ -847,3 +971,39 @@ def get_heartbeat_status(csp: str, year: Optional[int] = None, environment: Opti
 
 
 
+
+@app.get("/api/tickets-monthly")
+def get_tickets_monthly(
+    year: int,
+    csp: Optional[str] = None,
+    environment: Optional[str] = None,
+    narrow_environment: Optional[str] = None,
+):
+    """
+    Returns total monthly ticket counts for the given filters.
+    Response: [{"month": "YYYY-MM", "count": int}]
+    """
+    try:
+        df = get_data(year=year, environment=environment, narrow_environment=narrow_environment)
+
+        if csp and csp != 'All':
+            df = df[df['CSP'].str.upper() == csp.upper()]
+
+        if df.empty:
+            # Return 12 months with zero counts for the requested year
+            months = pd.date_range(start=f"{year}-01-01", end=f"{year}-12-01", freq='MS').strftime('%Y-%m')
+            return [{"month": m, "count": 0} for m in months]
+
+        df['Month'] = pd.to_datetime(df['tCreated']).dt.strftime('%Y-%m')
+        # Ensure all months in the year are present
+        months_order = pd.date_range(start=f"{year}-01-01", end=f"{year}-12-01", freq='MS').strftime('%Y-%m')
+
+        monthly_counts = (
+            df.groupby('Month').size().reindex(months_order, fill_value=0).reset_index()
+        )
+        monthly_counts.columns = ['month', 'count']
+
+        return monthly_counts.to_dict(orient='records')
+    except Exception as e:
+        logger.error(f"Error in /api/tickets-monthly: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
